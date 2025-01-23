@@ -251,7 +251,6 @@ def create_users_table():
     conn.commit()
     conn.close()
 # Call this function when the bot starts to ensure the table is created
-create_users_table()
 # Command to create a vote poll
 async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_db()
@@ -1334,6 +1333,7 @@ async def addvote(update: Update, context: CallbackContext):
 if __name__ == "__main__":
     init_db()
     create_db()
+    create_users_table()
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("vote", vote_command))
     application.add_handler(CommandHandler("start", start_command))
