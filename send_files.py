@@ -1,22 +1,22 @@
 import os
 import requests
 import logging
+import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import pytz
+from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Replace this with your own values
-TOKEN = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo' # Get the token from environment variable
+TOKEN =  "7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo"# Get the token from environment variable
 TARGET_CHAT = '@ActiveForever'  # The chat where the bot will respond
 
 # Create the application
 app = ApplicationBuilder().token(TOKEN).build()
-scheduler = AsyncIOScheduler()
 
 async def send_db_files(context):
     """Send all .db files in the current directory to the specified chat."""
@@ -62,21 +62,28 @@ async def scheduled_task(context):
     """Scheduled task to send .db files."""
     await send_db_files(context)
 
+async def schedule_jobs(context):
+    """Schedule jobs to run at specific times."""
+    while True:
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # Check if it's 12 AM or 12 PM
+        if now.hour == 0 and now.minute == 0:
+            await send_db_files(context)
+        elif now.hour == 12 and now.minute == 0:
+            await send_db_files(context)
+        await asyncio.sleep(60)  # Wait for a minute before checking again
+
 def main():
-    """Main function to start the bot and scheduler."""
+    """Main function to start the bot."""
     # Set up command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dl", handle_download))
 
-    # Schedule the task to run at 12 AM and 12 PM IST
-    scheduler.add_job(scheduled_task, 'cron', hour='0,12', minute='0', timezone='Asia/Kolkata', args=[app])
-    
-    # Start the scheduler
-    scheduler.start()
+    # Start the job scheduler
+    app.job_queue.run_repeating(schedule_jobs, interval=60, first=0)
 
     # Start the bot
     app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
