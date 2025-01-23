@@ -1,74 +1,80 @@
 import os
-import asyncio
 import requests
-from telethon import TelegramClient, events
+import logging
+from datetime import time
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 
-# Replace these with your own values
-api_id = '6'
-api_hash = 'eb06d4abfb49dc3eeb1aeb98ae0f581e'
-bot_token = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo'
-target_chat = '@ActiveForever'  # The chat where the bot will respond
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-client = TelegramClient('bot', api_id, api_hash).start(bot_token=bot_token)
+# Replace these with your own values
+TOKEN = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo'
+TARGET_CHAT = '@ActiveForever'  # The chat where the bot will respond
+
+# Create the application
+app = ApplicationBuilder().token(TOKEN).build()
 scheduler = AsyncIOScheduler()
 
-async def send_db_files(chat_id):
+async def send_db_files(context):
     """Send all .db files in the current directory to the specified chat."""
+    chat_id = context.chat_data.get('chat_id', TARGET_CHAT)
     for filename in os.listdir('.'):
         if filename.endswith('.db'):
-            await client.send_file(chat_id, filename)
+            await context.bot.send_document(chat_id, document=open(filename, 'rb'))
 
-@client.on(events.NewMessage(pattern='/start'))
-async def start(event):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Respond to the /start command."""
-    if event.chat.username == target_chat.lstrip('@'):
-        await event.respond('This bot will send .db files at 12 AM and 12 PM IST.')
-        chat = await client.get_entity(target_chat)
-        await send_db_files(chat.id)
+    await update.message.reply_text('This bot will send .db files at 12 AM and 12 PM IST.')
+    context.chat_data['chat_id'] = update.message.chat.id  # Store chat ID for later use
+    await send_db_files(context)
 
-@scheduler.scheduled_job('cron', hour='0,12', minute='0', timezone='Asia/Kolkata')
-async def scheduled_task():
-    """Scheduled task to send .db files."""
-    chat = await client.get_entity(target_chat)
-    await send_db_files(chat.id)
-
-def download_file(file_url, filename):
+async def download_file(file_url, filename):
     """Download a file from a URL and save it to the specified filename."""
     try:
         response = requests.get(file_url, allow_redirects=True)
         response.raise_for_status()  # Raise an error for bad responses
         with open(filename, 'wb') as file:
             file.write(response.content)
-        print(f"File downloaded successfully: {filename}")
+        logger.info(f"File downloaded successfully: {filename}")
     except requests.exceptions.RequestException as e:
-        print(f"Error downloading file: {e}")
+        logger.error(f"Error downloading file: {e}")
 
-@client.on(events.NewMessage(pattern='/dl'))
-async def handle_download(event):
+async def handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /dl command to download a file in reply."""
-    if event.is_reply:
-        replied_message = await event.get_reply_message()
-        if replied_message.media:
-            file_url = await client.get_file(replied_message)
+    if update.message.reply_to_message:
+        replied_message = update.message.reply_to_message
+        if replied_message.document:
+            file_id = replied_message.document.file_id
+            new_file = await context.bot.get_file(file_id)
+            file_url = new_file.file_path
             filename = os.path.basename(file_url)
             download_file(file_url, filename)
-            await event.respond(f"Downloaded file: {filename}")
+            await update.message.reply_text(f"Downloaded file: {filename}")
         else:
-            await event.respond("The replied message does not contain a file.")
+            await update.message.reply_text("The replied message does not contain a file.")
     else:
-        await event.respond("Please reply to a message containing a file with the /dl command.")
+        await update.message.reply_text("Please reply to a message containing a file with the /dl command.")
 
-async def main():
+async def scheduled_task(context):
+    """Scheduled task to send .db files."""
+    await send_db_files(context)
+
+def main():
     """Main function to start the bot and scheduler."""
-    await client.start()
-    scheduler.start()
-    print("Bot is running...")
+    # Set up command handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("dl", handle_download))
 
-# Run the main function
+    # Schedule the task to run at 12 AM and 12 PM IST
+    scheduler.add_job(scheduled_task, 'cron', hour='0,12', minute='0', timezone='Asia/Kolkata', args=[app])
+    scheduler.start()
+
+    # Start the bot
+    app.run_polling()
+
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        print(f"RuntimeError: {e}")
+    main()
