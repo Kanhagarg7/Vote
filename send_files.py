@@ -5,14 +5,14 @@ import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Replace this with your own values
-TOKEN =  "7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo"# Get the token from environment variable
+# Use your bot token directly (not recommended for production)
+TOKEN = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo'  # Replace with your actual token
 TARGET_CHAT = '@ActiveForever'  # The chat where the bot will respond
 
 # Create the application
@@ -31,15 +31,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.chat_data['chat_id'] = update.message.chat.id  # Store chat ID for later use
     await send_db_files(context)
 
-async def download_file(file_url, filename):
-    """Download a file from a URL and save it to the specified filename."""
+async def download_file(file_id, filename, context):
+    """Download a file from Telegram and save it to the current directory."""
     try:
-        response = requests.get(file_url, allow_redirects=True)
-        response.raise_for_status()  # Raise an error for bad responses
-        with open(filename, 'wb') as file:
-            file.write(response.content)
+        new_file = await context.bot.get_file(file_id)
+        await new_file.download_to_drive(filename)  # Download the file to the specified filename
         logger.info(f"File downloaded successfully: {filename}")
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Error downloading file: {e}")
 
 async def handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,11 +46,12 @@ async def handle_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         replied_message = update.message.reply_to_message
         if replied_message.document:
             file_id = replied_message.document.file_id
-            new_file = await context.bot.get_file(file_id)
-            file_url = new_file.file_path
-            filename = os.path.basename(file_url)
-            download_file(file_url, filename)
-            await update.message.reply_text(f"Downloaded file: {filename}")
+            filename = replied_message.document.file_name  # Get the original file name
+            await download_file(file_id, filename, context)  # Download the file
+            
+            # Get the full path of the saved file
+            full_path = os.path.abspath(filename)
+            await update.message.reply_text(f"Downloaded file: {filename}\nSaved at: {full_path}")
         else:
             await update.message.reply_text("The replied message does not contain a file.")
     else:
