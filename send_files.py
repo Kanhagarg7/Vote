@@ -1,7 +1,6 @@
 import os
 import requests
 import logging
-from datetime import time
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -11,8 +10,8 @@ import pytz
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Replace these with your own values
-TOKEN = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo'
+# Replace this with your own values
+TOKEN = '7759537035:AAFNvek1S2QXmkFn5VzWojwJPPzNVTuDhgo' # Get the token from environment variable
 TARGET_CHAT = '@ActiveForever'  # The chat where the bot will respond
 
 # Create the application
@@ -71,10 +70,13 @@ def main():
 
     # Schedule the task to run at 12 AM and 12 PM IST
     scheduler.add_job(scheduled_task, 'cron', hour='0,12', minute='0', timezone='Asia/Kolkata', args=[app])
+    
+    # Start the scheduler
     scheduler.start()
 
     # Start the bot
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
