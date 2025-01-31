@@ -20,7 +20,7 @@ from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, C
 import sqlite3
 from datetime import datetime
 img_path = "img/img.png"
-BOT_TOKEN = "7593876189:AAFslnQGowB9Ehipx83q-euIqgAwcK1fdmo"
+BOT_TOKEN = "7948701239:AAHceJ4o62b327roKIPoIwK4tFd58_aSfVA"
 redis_uri = "redis://redis-18180.c85.us-east-1-2.ec2.redns.redis-cloud.com:18180"
 redis_password = "A75rYUacyUeWBOqAHk0JaeAX4kBmABFv"
 owners = [5873900195]
@@ -31,15 +31,20 @@ API_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 def init_db():
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
+    
+    # Create the pollstable with message_channel_id
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS polls (
+        CREATE TABLE IF NOT EXISTS polls(
             poll_id INTEGER PRIMARY KEY AUTOINCREMENT,
             channel_username TEXT NOT NULL,
             creator_id INTEGER NOT NULL,
             votes INTEGER NOT NULL,
-            message_id INTEGER NOT NULL
+            message_id INTEGER NOT NULL,
+            message_channel_id TEXT  -- Stores the message link (https://t.me/channel/message_id)
         )
     """)
+
+    # Create the voters table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS voters (
             poll_id INTEGER NOT NULL,
@@ -50,23 +55,43 @@ def init_db():
             PRIMARY KEY (poll_id, user_id)
         )
     """)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_polls (
+
+    # Create the user_pollstable
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_polls(
             user_id INTEGER PRIMARY KEY,
             has_created_poll BOOLEAN
         )
-    ''')
+    """)
+
+    # Create the poll_votes table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS poll_votes (
             poll_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
-            user_name TEXT NOT NULL ,
+            user_name TEXT NOT NULL,
             message_id INTEGER NOT NULL,
             PRIMARY KEY (poll_id, user_id)
         )
     """)
+
     conn.commit()
     conn.close()
+import sqlite3
+
+def save_message_id_to_db(user_id, poll_id, message_id, message_channel_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE polls SET message_id = ?, message_channel_id = ? WHERE poll_id = ? AND creator_id = ?
+    """, (message_id, message_channel_id, poll_id, user_id))
+    
+    conn.commit()
+    conn.close()
+
+
+
 def delete_poll_info(poll_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
@@ -133,6 +158,89 @@ def get_poll_by_id(poll_id):
     result = cursor.fetchone()
     conn.close()
     return result
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import sqlite3
+
+import sqlite3
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
+
+import re
+
+async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ensure the user is authorized to refresh the polls(e.g., only admins)
+    if not is_authorized(update):
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    # Fetch all pollsfrom the database
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
+    """)
+    polls = cursor.fetchall()
+
+    if not polls:
+        await update.message.reply_text("❌ No polls found to refresh.")
+        return
+
+    # Loop through all pollsand update the inline buttons for each message
+    for poll in polls:
+        poll_id, channel_username, message_channel_id, votes, message_id = poll
+        
+        # Extract the message ID from the URL (if it's a URL)
+        match = re.search(r'(\d+)$', message_channel_id)  # Match the last part of the URL
+        if match:
+            message_channel_id = match.group(1)  # This gives the numeric message ID
+        
+        print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+
+        # Create the new inline button with updated vote count
+        new_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+        )
+
+        try:
+            # Try to update the message in the channel with the new inline button
+            await context.bot.edit_message_reply_markup(
+                chat_id=f"@{channel_username}",  # Correct channel username
+                message_id=int(message_channel_id),  # Convert message_channel_id to integer
+                reply_markup=new_button
+            )
+        except TelegramError as e:
+            # If the message is not found or any other Telegram-related issue, log and inform the user
+            if "Message to edit not found" in str(e):
+                print(f"Message with ID {message_channel_id} not found.")
+                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: Message not found.")
+                
+                # Optionally re-send the poll
+                await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
+            else:
+                print(f"Error updating poll {poll_id}: {e}")
+                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: {e}")
+
+    await update.message.reply_text("✅ All  vote and polls have been refreshed!")
+
+
+def decrement_vote(poll_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("UPDATE polls SET votes = votes - 1 WHERE poll_id = ?", (poll_id,))
+    
+    conn.commit()
+    conn.close()
+def remove_vote_record(poll_id, user_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?", (poll_id, user_id))
+    
+    conn.commit()
+    conn.close()
+
 def increment_vote(poll_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
@@ -250,11 +358,24 @@ def create_users_table():
     """)
     conn.commit()
     conn.close()
+def get_poll_link(poll_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT message_channel_id FROM polls WHERE poll_id = ?", (poll_id,))
+    result = cursor.fetchone()
+    
+    conn.close()
+    
+    if result:
+        return result[0]  # Returns the message link (https://t.me/channel/12345)
+    return None
+
 # Call this function when the bot starts to ensure the table is created
+
 # Command to create a vote poll
 async def vote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_db()
-    create_users_table()
     # Check if the user is authorized (either bot owner or sudo user)
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -322,7 +443,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 
-CHANNEL_USERNAME = "@Trusted_seller_of_pd"
+CHANNEL_USERNAME = "@uuuuyghbb"
 
 async def check_user_membership(user_id, bot, CHANNEL_USERNAME):
     """Check if a user is a member of the specified channel."""
@@ -366,7 +487,7 @@ async def start_command(update, context):
     is_member = await check_user_membership(user.id, context.bot, CHANNEL_USERNAME)
     if not is_member:
         # Provide inline buttons to join the channel
-        join_link = f"https://t.me/Trusted_seller_of_pd"
+        join_link = f"https://t.me/uuuuyghbb"
         keyboard = [
             [InlineKeyboardButton("I Joined ✅", callback_data=f"joined_{CHANNEL_USERNAME}")],
             [InlineKeyboardButton("Join Channel 🔗", url=join_link)],
@@ -420,26 +541,31 @@ async def start_command(update, context):
             f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=1)}\n"
             f"‣ *Message ID* : `{message_id}`\n"
             f"‣ *Note* : Only channel subscribers can vote.\n\n"
-            f"×× Created by - [@Trusted_seller_of_pd](https://t.me/{escape_markdown(bot_username, version=1)})"
+            f"×× Created by - [@uuuuyghbb](https://t.me/{escape_markdown(bot_username, version=1)})"
         )
 
 # Send the photo or message
         if os.path.exists(img_path):
-            await context.bot.send_photo(
+            sent_message = await context.bot.send_photo(
                 chat_id=f"@{channel_username}",
-                photo=open(img_path, "rb"),
                 caption=response,
+                photo=open(img_path, "rb"),
                 reply_markup=button,
-                parse_mode="Markdown",  # Using Markdown parsing
+                parse_mode="Markdown",
+                disable_web_page_preview=True,
             )
+
         else:
-            await context.bot.send_message(
+            sent_message = await context.bot.send_message(
                 chat_id=f"@{channel_username}",
                 text=response,
                 reply_markup=button,
-                parse_mode="Markdown",  # Using Markdown parsing
-                disable_web_page_preview=True,
-           )
+                parse_mode="Markdown",
+            )
+
+        if sent_message:
+            message_channel_id = f"https://t.me/{channel_username}/{sent_message.message_id}"
+            save_message_id_to_db(user.id, poll_id, sent_message.message_id, message_channel_id)
 
         mark_poll_created(user.id)
         await update.message.reply_text("✅ You have successfully participated in the voting!")
@@ -462,7 +588,7 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor.execute("""
         SELECT vote_count, ban_until, message_id FROM voters WHERE user_id = ?
     """, (user_id,))
-    user_data = cursor.fetchone()  # Fetch the user data from the database
+    user_data = cursor.fetchone()    # Fetch the user data from the database
     if user_data:
         vote_count, ban_until, user_message_id = user_data
     else:
@@ -486,9 +612,9 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(f"Hey {user_name}, You have already voted. You can't vote again.", show_alert=True)
         return
     try:
-        chat_member = await context.bot.get_chat_member("@Trusted_seller_of_pd", user_id)
+        chat_member = await context.bot.get_chat_member("@uuuuyghbb", user_id)
         if chat_member.status not in ["member", "administrator", "creator"]:
-            raise BadRequest("❌  You must join @Trusted_seller_of_pd to vote.")
+            raise BadRequest("❌  You must join @uuuuyghbb to vote.")
     except BadRequest as e:
         await query.answer(str(e), show_alert=True)
         return
@@ -506,6 +632,9 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Fetch updated vote count
     poll_info = get_poll_by_id(poll_id)
     new_votes = poll_info[1]
+    # Fetch poll info
+# message_channel_id
+
     # Update the inline button with the new vote count
     new_button = InlineKeyboardMarkup(
         [[InlineKeyboardButton(f"Vote ⚡  ({new_votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
@@ -854,25 +983,33 @@ def get_channel_by_poll_id(poll_id):
     else:
         return None  # Return None if no result found
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackContext
+
 async def delete_poll(update: Update, context: CallbackContext):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
-    # Extract poll_id and message_id from arguments
+    
+    # Extract poll_id from command arguments
     try:
         poll_id = int(context.args[0])
     except (IndexError, ValueError):
         await update.message.reply_text('Usage: /delete_poll <poll_id>')
         return
 
-    # Retrieve the channel username associated with the poll_id
-    channel_username = get_channel_by_poll_id(poll_id)
-    if not channel_username:
-        await update.message.reply_text(f"No channel found for Poll ID {poll_id}.")
+    # Retrieve poll details (message_channel_id is the actual message ID)
+    poll_info = get_poll_info(poll_id)  # (channel_username, message_id, message_channel_id)
+    if not poll_info:
+        await update.message.reply_text(f"No poll found with ID {poll_id}.")
         return
+    
+    channel_username, message_id, message_channel_id = poll_info  # Unpack the tuple
 
-    # Confirm deletion with the user
-    confirm_message = f"Are you sure you want to delete Poll {poll_id} and its message from @{channel_username}?"
+    # Ask for confirmation
+    confirm_message = (
+        f"Are you sure you want to disqualify Poll {poll_id} from @{channel_username}?"
+    )
     keyboard = [
         [
             InlineKeyboardButton("Yes", callback_data=f"delete_{poll_id}_yes"),
@@ -880,29 +1017,105 @@ async def delete_poll(update: Update, context: CallbackContext):
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(confirm_message, reply_markup=reply_markup)
 
-# Confirmation for deleting the poll
+import re
+
+# Function to extract message ID from URL
+def extract_message_id_from_url(url: str) -> int:
+    match = re.search(r'/(\d+)$', url)
+    if match:
+        return int(match.group(1))  # Return the message ID as an integer
+    return None  # Return None if the URL is not in the correct format
+
 async def confirm_delete_poll(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
 
-    # Extract data from callback
+    # Extract poll ID from callback data
     data = query.data
     parts = data.split('_')
-    poll_id = int(parts[1])  # Poll ID is the second element after "delete"
+    poll_id = int(parts[1])
 
     if "yes" in data:
-        # Retrieve channel_username
-        await query.edit_message_text(
-            text=f"Poll {poll_id} has been deleted from the database."
-        )
+        # Retrieve poll details
+        poll_info = get_poll_info(poll_id)  # (channel_username, message_id, message_channel_id)
+        if not poll_info:
+            await query.edit_message_text(text=f"Error: Poll {poll_id} not found.")
+            return
+        
+        channel_username, message_id, message_channel_id = poll_info  # Unpack the tuple
 
-        # Remove poll and message info from the database
+        # Check if message_channel_id is a URL, if so, extract the message ID
+        if isinstance(message_channel_id, str) and message_channel_id.startswith('https://t.me/'):
+            message_channel_id = extract_message_id_from_url(message_channel_id)
+
+        # If the message_id could not be extracted, inform the user
+        if not message_channel_id:
+            await query.edit_message_text(text="❌ Invalid message ID.")
+            return
+
+        chat_id = f"@{channel_username}"
+
+        update_status = []
+
+        try:
+            # Forward the poll message to the user who called the command
+            message = await context.bot.forward_message(
+                chat_id=update.effective_chat.id, from_chat_id=chat_id, message_id=message_channel_id
+            )
+
+            if not message:
+                await query.edit_message_text(text="Error: Could not retrieve poll message.")
+                return
+
+            # Check if the message is a photo or text
+            if message.caption:
+                # If the message has a caption (photo message), update the caption
+                updated_caption = message.caption + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
+                await context.bot.edit_message_caption(
+                    chat_id=chat_id,
+                    message_id=message_channel_id,
+                    caption=updated_caption,
+                    parse_mode="Markdown",
+                    reply_markup=None  # Remove inline buttons
+                )
+            else:
+                # If it's a text message, update the text
+                updated_text = message.text + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_channel_id,
+                    text=updated_text,
+                    parse_mode="Markdown",
+                    reply_markup=None  # Remove inline buttons
+                )
+
+            update_status.append(f"✅ Poll message updated in @{channel_username}.")
+        
+        except Exception as e:
+            update_status.append(f"❌ Failed to update poll message. Error: {str(e)}")
+
+        # Delete poll info from the database after processing
         delete_poll_info(poll_id)
 
+        # Provide final status to the user
+        await query.edit_message_text(text="\n".join(update_status))
+
     else:
-        await query.edit_message_text(text="Poll deletion canceled.")
+        await query.edit_message_text(text="Poll disqualification canceled.")
+
+def get_poll_info(poll_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT channel_username, message_id, message_channel_id FROM polls WHERE poll_id = ?", (poll_id,))
+    result = cursor.fetchone()
+    
+    conn.close()
+    
+    return result if result else None  # Returns (channel_username, message_id, message_channel_id) or None if not found
 
 import sqlite3
 from telegram.ext import Application, CommandHandler
@@ -927,7 +1140,7 @@ def create_db():
     )""")
     
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS polls (
+    CREATE TABLE IF NOT EXISTS polls(
         poll_id INTEGER PRIMARY KEY,
         user_id INTEGER,
         channel_username TEXT,
@@ -998,7 +1211,7 @@ def unban_user(user_id):
     conn.close()
 
 # Get Sudo Users Function
-def get_sudo_users():
+def get_bot_main_db():
     conn = sqlite3.connect("bot_main.db")
     cursor = conn.cursor()
     cursor.execute("SELECT user_id, username FROM sudo_users")
@@ -1329,12 +1542,157 @@ async def addvote(update: Update, context: CallbackContext):
         await update.message.reply_text("Invalid input. Please use the correct format: /addvote <poll_id> <no_of_votes>.")
     except Exception as e:
         await update.message.reply_text(f"An error occurred: {e}")
-# Main function to start the bot
+import asyncio
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import sqlite3
+import re
+
+async def update_inline_button_periodically(context):
+
+    """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
+    while True:
+        await asyncio.sleep(60)  # Wait for 1 minute before checking again
+
+        # Fetch all pollsfrom the database
+        conn = sqlite3.connect("vote_bot.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
+        """)
+        polls = cursor.fetchall()
+
+        if not polls:
+            print("No polls found to refresh.")
+            continue  # No pollsto refresh, continue checking in the next cycle
+
+        # Loop through all pollsand update the inline buttons for each message
+        for poll in polls:
+            poll_id, channel_username, message_channel_id, votes, message_id = poll
+
+            # Extract the message ID from the URL (if it's a URL)
+            match = re.search(r'(\d+)$', message_channel_id)  # Match the last part of the URL
+            if match:
+                message_channel_id = match.group(1)  # This gives the numeric message ID
+
+            print(f"Checking membership and updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+
+            # Check membership of users who voted in this poll
+            cursor.execute("""
+                SELECT user_id FROM poll_votes WHERE poll_id = ?
+            """, (poll_id,))
+            users = cursor.fetchall()
+
+            for user in users:
+                user_id = user[0]
+                try:
+                    # Check if the user is still a member of the channel
+                    chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
+                    if chat_member.status not in ["member", "administrator", "creator"]:
+                        # If user left the channel, decrease their vote count
+                        print(f"User {user_id} has left the channel. Decreasing their vote.")
+                        decrease_vote_count(poll_id, user_id)
+                except Exception as e:
+                    print(f"Error checking membership for user {user_id}: {e}")
+
+            # After checking membership, update the vote count and the inline button
+            await update_vote_count_and_inline_button(poll_id, message_id, context)
+
+        conn.close()
+
+def decrease_vote_count(poll_id, user_id):
+    """ Remove only one vote from the poll for the specific user when they leave the channel. """
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+
+    # Check if the user has a vote recorded
+    cursor.execute("""
+        SELECT COUNT(*) FROM poll_votes WHERE poll_id = ? AND user_id = ?
+    """, (poll_id, user_id))
+    vote_exists = cursor.fetchone()[0]  # Returns 1 if vote exists, 0 if not
+
+    if vote_exists:
+        # Remove the user's vote from poll_votes
+        cursor.execute("""
+            DELETE FROM poll_votes WHERE poll_id = ? AND user_id = ?
+        """, (poll_id, user_id))
+
+        # Decrease the total vote count for the poll **by 1**
+        cursor.execute("""
+            UPDATE polls SET votes = votes - 1 WHERE poll_id = ? AND votes > 0
+        """, (poll_id,))
+
+        # Remove the user from the voters table (so they can vote again later)
+        cursor.execute("""
+            DELETE FROM voters WHERE poll_id = ? AND user_id = ?
+        """, (poll_id, user_id))
+
+        conn.commit()
+
+    conn.close()
+
+
+channel_username = "uuuuyghbb"
+async def update_vote_count_and_inline_button(poll_id, message_id, context):
+    """ Updates the vote count and inline button after checking membership """
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
+    """)
+    polls = cursor.fetchall()
+
+    if not polls:
+        await update.message.reply_text("❌ No polls found to refresh.")
+        return
+
+    # Loop through all pollsand update the inline buttons for each message
+    for poll in polls:
+        poll_id, channel_username, message_channel_id, votes, message_id = poll
+        
+        # Extract the message ID from the URL (if it's a URL)
+        match = re.search(r'(\d+)$', message_channel_id)  # Match the last part of the URL
+        if match:
+            message_channel_id = match.group(1)  # This gives the numeric message ID
+        
+        print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+
+        # Create the new inline button with updated vote count
+        new_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+        )
+
+        try:
+            # Try to update the message in the channel with the new inline button
+            await context.bot.edit_message_reply_markup(
+                chat_id=f"@{channel_username}",  # Correct channel username
+                message_id=int(message_channel_id),  # Convert message_channel_id to integer
+                reply_markup=new_button
+            )
+        except TelegramError as e:
+            # If the message is not found or any other Telegram-related issue, log and inform the user
+            if "Message to edit not found" in str(e):
+                print(f"Message with ID {message_channel_id} not found.")
+                print(f"❌ Failed to update poll {poll_id}: Message not found.")
+                
+                # Optionally re-send the poll
+                await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
+            else:
+                print(f"Error updating poll {poll_id}: {e}")
+                print(f"❌ Failed to update poll {poll_id}: {e}")
+
+# Your main function to start the bot
 if __name__ == "__main__":
     init_db()
     create_db()
     create_users_table()
+    # Create the application with the provided BOT_TOKEN
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # Start the periodic task of updating inline buttons every minute within the event loop
+    application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
+
+    # Add all your command handlers
     application.add_handler(CommandHandler("vote", vote_command))
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("stop", stop_command))
@@ -1355,14 +1713,11 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("listban", listban))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
-# Add the handlers to your application or dispatcher
-    application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
+    application.add_handler(CommandHandler("refresh", refresh))
     application.add_handler(CommandHandler("addvotes", addvote))
 
-    # Schedule the poll update task every 10 minute
-
-
-
-
     # Add callback handler for inline button presses
+    application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
+
+    # Start polling to handle updates
     application.run_polling()
