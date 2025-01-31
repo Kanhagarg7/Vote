@@ -552,7 +552,6 @@ async def start_command(update, context):
                 photo=open(img_path, "rb"),
                 reply_markup=button,
                 parse_mode="Markdown",
-                disable_web_page_preview=True,
             )
 
         else:
