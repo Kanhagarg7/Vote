@@ -1,1 +1,1 @@
-worker: python3 auto*
+worker: python3 auto.py
