@@ -4,7 +4,7 @@ import requests
 from datetime import datetime
 
 # GitHub Credentials
-GIT_TOKEN = "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"
+GIT_TOKEN = "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"
 GIT_USERNAME = "Votingbotm"
 GIT_REPO = "Vote"
 GIT_BRANCH = "main"
