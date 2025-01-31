@@ -1,3 +1,4 @@
 python-telegram-bot[job-queue]
 telethon
 schedule 
+requests==2.28.1
