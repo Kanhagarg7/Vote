@@ -13,41 +13,59 @@ GIT_REPO = "Vote"
 
 # Retrieve bot token and channel ID from environment variables
 
-# Get the script's directory (same as repo directory)
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-os.chdir(SCRIPT_DIR)
+# Get the script's directory (same as repo directory
+# GitHub repository detail
+GIT_API_URL = "https://api.github.com"
+GIT_BRANCH = "main"  # Modify if you're using another branch
 
-def log_message(message):
-    """Logs messages"""
-    print(f"[{datetime.now()}] {message}")
+# Prepare commit data
+def create_commit():
+    # Get the latest commit sha
+    url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/branches/{GIT_BRANCH}"
+    headers = {"Authorization": f"token {GIT_TOKEN}"}
+    response = requests.get(url, headers=headers)
+    branch_data = response.json()
 
-def git_push():
-    """Commit and push changes to GitHub"""
-    if not GIT_TOKEN:
-        log_message("Error: GitHub token is missing.")
-        return
+    commit_sha = branch_data["commit"]["sha"]
 
-    try:
-        # Add changes to git
-        log_message("Checking for changes in the repository...")
-        os.system("git add .")
+    # Create new commit object
+    commit_message = f"Auto commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    commit_data = {
+        "message": commit_message,
+        "tree": commit_sha,
+        "parents": [commit_sha]
+    }
 
-        # Check if there are any changes to commit
-        commit_message = f"Auto commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        result = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
+    # Create a commit via GitHub API
+    commit_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/commits"
+    commit_response = requests.post(commit_url, json=commit_data, headers=headers)
+    
+    return commit_response.json()
 
-        if result.returncode != 0:  # If there are changes
-            log_message(f"Changes detected, committing and pushing...")
-            os.system(f'git commit -m "{commit_message}"')
-            os.system("git push origin main")  # Change 'main' if using another branch
-            log_message(f"Changes pushed successfully to {GIT_REPO}!")
-        else:
-            log_message("No changes detected, skipping commit and push.")
+# Push commit to GitHub
+def push_commit():
+    # Create the commit
+    commit_response = create_commit()
+    commit_sha = commit_response["sha"]
 
-    except Exception as e:
-        log_message(f"Error: {e}")
+    # Push the commit to the branch
+    push_data = {
+        "sha": commit_sha
+    }
 
-# Run git_push every hour
-while True:
-    git_push()
-    time.sleep(3600)  # Wait for 1 hour before running again
+    push_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/refs/heads/{GIT_BRANCH}"
+    push_response = requests.patch(push_url, json=push_data, headers={"Authorization": f"token {GIT_TOKEN}"})
+
+    return push_response.json()
+
+# Push changes every 1 hour
+def auto_push():
+    while True:
+        # Push changes
+        push_response = push_commit()
+        print(f"Changes pushed: {push_response}")
+        time.sleep(3600)  # Push every 1 hour
+
+if __name__ == "__main__":
+    auto_push()
+    
