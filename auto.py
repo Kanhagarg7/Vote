@@ -87,8 +87,7 @@ schedule.every(1).hours.do(git_push)
 
 # Run main.py in a separate thread
 if __name__ == "__main__":
-    # Start the main.py process in a separate thread
-    threading.Thread(target=run_main, daemon=True).start()
+    # Start the main.py process in a separate threa
     
     # Keep the script running and execute scheduled tasks
     log_message(f"Git auto-push script running in {SCRIPT_DIR} with main.py...")
