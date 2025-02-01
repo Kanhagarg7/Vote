@@ -13,14 +13,14 @@ from telegram.ext import (
 from telegram.helpers import escape_markdown
 
 from telegram.error import BadRequest
-import asyncio 
 import time
 from datetime import *
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, ContextTypes
 import sqlite3
+from datetime import datetime
 img_path = "img/img.png"
-BOT_TOKEN = "7948701239:AAHceJ4o62b327roKIPoIwK4tFd58_aSfVA"
+BOT_TOKEN = "7593876189:AAFslnQGowB9Ehipx83q-euIqgAwcK1fdmo"
 redis_uri = "redis://redis-18180.c85.us-east-1-2.ec2.redns.redis-cloud.com:18180"
 redis_password = "A75rYUacyUeWBOqAHk0JaeAX4kBmABFv"
 owners = [5873900195]
@@ -95,7 +95,6 @@ def save_message_id_to_db(user_id, poll_id, message_id, message_channel_id):
 def delete_poll_info(poll_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM voters WHERE poll_id = ?", (poll_id,))
     cursor.execute("DELETE FROM polls WHERE poll_id = ?", (poll_id,))
     conn.commit()
     conn.close()
@@ -443,7 +442,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 
-CHANNEL_USERNAME = "@uuuuyghbb"
+CHANNEL_USERNAME = "@Trusted_Seller_of_Pd"
 
 async def check_user_membership(user_id, bot, CHANNEL_USERNAME):
     """Check if a user is a member of the specified channel."""
@@ -487,7 +486,7 @@ async def start_command(update, context):
     is_member = await check_user_membership(user.id, context.bot, CHANNEL_USERNAME)
     if not is_member:
         # Provide inline buttons to join the channel
-        join_link = f"https://t.me/uuuuyghbb"
+        join_link = f"https://t.me/Trusted_Seller_of_Pd"
         keyboard = [
             [InlineKeyboardButton("I Joined ✅", callback_data=f"joined_{CHANNEL_USERNAME}")],
             [InlineKeyboardButton("Join Channel 🔗", url=join_link)],
@@ -541,7 +540,7 @@ async def start_command(update, context):
             f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=1)}\n"
             f"‣ *Message ID* : `{message_id}`\n"
             f"‣ *Note* : Only channel subscribers can vote.\n\n"
-            f"×× Created by - [@uuuuyghbb](https://t.me/{escape_markdown(bot_username, version=1)})"
+            f"×× Created by - [@Trusted_Seller_of_Pd](https://t.me/{bot_username})"
         )
 
 # Send the photo or message
@@ -611,9 +610,9 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(f"Hey {user_name}, You have already voted. You can't vote again.", show_alert=True)
         return
     try:
-        chat_member = await context.bot.get_chat_member("@uuuuyghbb", user_id)
+        chat_member = await context.bot.get_chat_member("@Trusted_Seller_of_Pd", user_id)
         if chat_member.status not in ["member", "administrator", "creator"]:
-            raise BadRequest("❌  You must join @uuuuyghbb to vote.")
+            raise BadRequest("❌  You must join @Trusted_Seller_of_Pd to vote.")
     except BadRequest as e:
         await query.answer(str(e), show_alert=True)
         return
@@ -1072,7 +1071,7 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             # Check if the message is a photo or text
             if message.caption:
                 # If the message has a caption (photo message), update the caption
-                updated_caption = message.caption + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
+                updated_caption = ~~message.caption~~ + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
                 await context.bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_channel_id,
@@ -1631,7 +1630,7 @@ def decrease_vote_count(poll_id, user_id):
     conn.close()
 
 
-channel_username = "uuuuyghbb"
+channel_username = "Trusted_Seller_of_Pd"
 async def update_vote_count_and_inline_button(poll_id, message_id, context):
     """ Updates the vote count and inline button after checking membership """
     conn = sqlite3.connect("vote_bot.db")
@@ -1679,190 +1678,6 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
             else:
                 print(f"Error updating poll {poll_id}: {e}")
                 print(f"❌ Failed to update poll {poll_id}: {e}")
-import subprocess
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
-
-
-async def bash_command(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("Usage: /bash <command>")
-        return
-    
-    command = " ".join(context.args)  # Join arguments into a single command
-    try:
-        result = subprocess.run(command, shell=True, text=True, capture_output=True)
-        output = result.stdout if result.stdout else result.stderr
-    except Exception as e:
-        output = str(e)
-    
-    # Ensure output is within Telegram's message limit
-    if len(output) > 4000:
-        output = output[:4000] + "\n\n[Output Truncated]"
-    
-    await update.message.reply_text(f"```\n{output}\n```", parse_mode="Markdown")
-import os
-import glob
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
-
-async def upload_files(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("Usage: /ul <filename_pattern>\nExample: /ul vote_bot*")
-        return
-    
-    pattern = " ".join(context.args)  # Get the pattern from user input
-    files = glob.glob(pattern)  # Find matching files
-    
-    if not files:
-        await update.message.reply_text("No matching files found.")
-        return
-
-    for file_path in files:
-        if os.path.isfile(file_path):
-            try:
-                await update.message.reply_document(document=open(file_path, "rb"))
-            except Exception as e:
-                await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
-
-
-
-import os
-import base64
-import requests
-import time
-from datetime import datetime
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
-import threading
-
-# Telegram Bot Token
-TELEGRAM_BOT_TOKEN = "7469236370:AAH0_dD-7ZjdbepID5z2YhKjY_FpSX6K6Qg"
-
-# GitHub Credentials
-GIT_TOKEN = os.getenv("GH_TOKEN")  # GitHub token stored in Heroku environment
-GIT_USERNAME = "Votingbotm"
-GIT_REPO = "Vote"
-GIT_API_URL = "https://api.github.com"
-GIT_BRANCH = "main"
-
-if not GIT_TOKEN:
-    raise ValueError("❌ GitHub token is missing in environment variables!")
-
-# Function to upload a file to GitHub
-def upload_to_github(file_path, github_path):
-    """Uploads a file (SQLite DB) to GitHub using the API."""
-    
-    url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/contents/{github_path}"
-    headers = {"Authorization": f"token {GIT_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-
-    # Read the file and encode it as Base64
-    try:
-        with open(file_path, "rb") as file:
-            content = base64.b64encode(file.read()).decode("utf-8")
-    except FileNotFoundError:
-        print(f"⚠ File not found: {file_path}")
-        return None
-
-    # Get the latest SHA of the file (required for updating an existing file)
-    response = requests.get(url, headers=headers)
-    sha = None
-    if response.status_code == 200:  # File exists, get SHA
-        sha = response.json().get("sha")
-
-    # Prepare commit data
-    commit_message = f"📦 Auto Backup: {os.path.basename(file_path)} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    data = {
-        "message": commit_message,
-        "content": content,
-        "branch": GIT_BRANCH
-    }
-    if sha:
-        data["sha"] = sha  # Required for updating an existing file
-
-    # Upload file to GitHub
-    upload_response = requests.put(url, json=data, headers=headers)
-    
-    if upload_response.status_code in [200, 201]:
-        print(f"✅ Successfully uploaded {file_path} to GitHub.")
-        return upload_response.json()
-    else:
-        print(f"❌ Upload failed for {file_path}: {upload_response.json()}")
-        return None
-
-# Function to backup database files
-def backup_databases():
-    """Backs up both SQLite database files to GitHub."""
-    files_to_backup = {
-        "vote_bot.db": "vote_bot.db",
-        "bot_main.db": "bot_main.db"
-    }
-    
-    for local_path, github_path in files_to_backup.items():
-        upload_to_github(local_path, github_path)
-
-# Auto backup function with initial 1-hour delay
-def auto_backup():
-    """Waits for 1 hour before starting, then backs up every 1 hour."""
-    print("🕒 Waiting 1 hour before first commit...")
-    time.sleep(3600)  # Wait for 1 hour
-
-    while True:
-        print("🔄 Running backup...")
-        backup_databases()
-        time.sleep(3600)  # Wait for 1 hour before the next commit
-
-# Telegram command to manually trigger backup
-async def backup_command(update: Update, context: CallbackContext):
-    """Telegram command to manually trigger backup."""
-    await update.message.reply_text("⏳ Backing up database files...")
-
-    backup_databases()
-    await update.message.reply_text("✅ Database backup completed!")
-
-# Setup Telegram bot
-async def bash_comman(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("Usage: /bash <command>")
-        return
-    
-    command = " ".join(context.args)  # Join arguments into a single command
-    try:
-        result = subprocess.run(command, shell=True, text=True, capture_output=True)
-        output = result.stdout if result.stdout else result.stderr
-    except Exception as e:
-        output = str(e)
-    
-    # Ensure output is within Telegram's message limit
-    if len(output) > 4000:
-        output = output[:4000] + "\n\n[Output Truncated]"
-    
-    await update.message.reply_text(f"```\n{output}\n```", parse_mode="Markdown")
-import os
-import glob
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
-
-async def upload_file(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("Usage: /ul <filename_pattern>\nExample: /ul vote_bot*")
-        return
-    
-    pattern = " ".join(context.args)  # Get the pattern from user input
-    files = glob.glob(pattern)  # Find matching files
-    
-    if not files:
-        await update.message.reply_text("No matching files found.")
-        return
-
-    for file_path in files:
-        if os.path.isfile(file_path):
-            try:
-                await update.message.reply_document(document=open(file_path, "rb"))
-            except Exception as e:
-                await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
-
-# Run t
 
 # Your main function to start the bot
 if __name__ == "__main__":
@@ -1906,4 +1721,3 @@ if __name__ == "__main__":
 
     # Start polling to handle updates
     application.run_polling()
-    
