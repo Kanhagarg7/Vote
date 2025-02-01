@@ -1027,6 +1027,13 @@ def extract_message_id_from_url(url: str) -> int:
         return int(match.group(1))  # Return the message ID as an integer
     return None  # Return None if the URL is not in the correct format
 
+import telegram
+
+def escape_markdown_v2(text):
+    """Escapes special characters for Telegram MarkdownV2."""
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+
 async def confirm_delete_poll(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
@@ -1070,23 +1077,27 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
 
             # Check if the message is a photo or text
             if message.caption:
-                # If the message has a caption (photo message), update the caption
-                updated_caption = f'~~{message.caption}~~ + "\n\nTHIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY"'
+                # Escape caption before applying strikethrough formatting
+                escaped_caption = escape_markdown_v2(message.caption)
+                updated_caption = f"~~{escaped_caption}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+
                 await context.bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     caption=updated_caption,
-                    parse_mode="MarkdownV2",
+                    parse_mode=telegram.constants.ParseMode.MARKDOWN_V2,
                     reply_markup=None  # Remove inline buttons
                 )
             else:
-                # If it's a text message, update the text
-                updated_text = f'~~{message.text}~~ + "\n\nTHIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY"'
+                # Escape text before applying strikethrough formatting
+                escaped_text = escape_markdown_v2(message.text)
+                updated_text = f"~~{escaped_text}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     text=updated_text,
-                    parse_mode="MarkdownV2",
+                    parse_mode=telegram.constants.ParseMode.MARKDOWN_V2,
                     reply_markup=None  # Remove inline buttons
                 )
 
