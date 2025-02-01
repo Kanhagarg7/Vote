@@ -1864,21 +1864,9 @@ async def upload_file(update: Update, context: CallbackContext):
 # Run t
 
 # Your main function to start the bot
-if __name__ == "__main__":
-    init_db()
-    create_db()
-    create_users_table()
+def bot1:
     # Create the application with the provided BOT_TOKEN
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(CommandHandler("backup", backup_command)) 
-    app.add_handler(CommandHandler("bash", bash_comman))
-    app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
-
-# Start auto backup in a separate thread
-    threading.Thread(target=auto_backup, daemon=True).start()
-
-
 
     # Start the periodic task of updating inline buttons every minute within the event loop
     application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
@@ -1910,7 +1898,33 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("ul", upload_files))
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
+    application.run_polling()
+def bot2:
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("backup", backup_command)) 
+    app.add_handler(CommandHandler("bash", bash_comman))
+    app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
+
+# Start auto backup in a separate thread
+    threading.Thread(target=auto_backup, daemon=True).start()
+
+
 
     # Start polling to handle updates
-    application.run_polling()
     app.run_polling()
+def main():
+    # Initialize databases and tables
+    init_db()
+    create_db()
+    create_users_table()
+
+    # Start both bots in separate threads
+    threading.Thread(target=run_bot_1, daemon=True).start()
+    threading.Thread(target=run_bot_2, daemon=True).start()
+
+    # Keep the main program running while both bots are running
+    while True:
+        pass
+
+if __name__ == "__main__":
+    main()
