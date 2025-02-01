@@ -1,15 +1,16 @@
 import os
 import requests
-import time
 from datetime import datetime
+import time
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
+import threading
 
-# Telegram Bot Token
+# Telegram Bot Token (set in code or as environment variable)
 TELEGRAM_BOT_TOKEN = "7469236370:AAH0_dD-7ZjdbepID5z2YhKjY_FpSX6K6Qg"
 
-# GitHub Credentials
-GIT_TOKEN = os.getenv("GH_TOKEN")  # Heroku environment variable for GitHub token
+# GitHub Credentials (GH_TOKEN must be set in Heroku's config vars)
+GIT_TOKEN = os.getenv("GH_TOKEN")
 GIT_USERNAME = "Votingbotm"
 GIT_REPO = "Vote"
 GIT_API_URL = "https://api.github.com"
@@ -18,7 +19,7 @@ GIT_BRANCH = "main"
 if not GIT_TOKEN:
     raise ValueError("GitHub token is not set in environment variables!")
 
-# Create a commit
+# Function to create a commit on GitHub using the correct tree SHA
 def create_commit():
     url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/branches/{GIT_BRANCH}"
     headers = {"Authorization": f"token {GIT_TOKEN}"}
@@ -46,29 +47,39 @@ def create_commit():
 
     commit_data = commit_response.json()
     tree_sha = commit_data.get("tree", {}).get("sha")
-
     if not tree_sha:
         print("⚠ No tree SHA found! Cannot proceed.")
         return None
 
     # Create the commit with the correct tree SHA
     commit_message = f"Auto commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    commit_data = {
+    new_commit_data = {
         "message": commit_message,
-        "tree": tree_sha,  # Use the correct tree SHA
+        "tree": tree_sha,
         "parents": [commit_sha]
     }
 
     commit_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/commits"
-    commit_response = requests.post(commit_url, json=commit_data, headers=headers)
-
-    if commit_response.status_code != 201:
-        print(f"❌ Commit creation failed: {commit_response.json()}")
+    new_commit_response = requests.post(commit_url, json=new_commit_data, headers=headers)
+    if new_commit_response.status_code != 201:
+        print(f"❌ Commit creation failed: {new_commit_response.json()}")
         return None
 
-    return commit_response.json()
+    return new_commit_response.json()
 
-# Auto-push function (Starts after 1 hour)
+# Function to push the commit to GitHub by updating the branch reference
+def push_commit():
+    commit_response = create_commit()
+    if commit_response is None:
+        return None
+
+    new_commit_sha = commit_response["sha"]
+    push_data = {"sha": new_commit_sha}
+    push_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/refs/heads/{GIT_BRANCH}"
+    push_response = requests.patch(push_url, json=push_data, headers={"Authorization": f"token {GIT_TOKEN}"})
+    return push_response.json()
+
+# Auto-push function: waits one hour, then pushes commits every hour.
 def auto_push():
     print("Waiting for 1 hour before starting the first commit...")
     time.sleep(3600)  # Wait for 1 hour before the first commit
@@ -79,25 +90,23 @@ def auto_push():
             print(f"✅ Changes pushed: {push_response}")
         else:
             print("⚠ No changes pushed due to an error.")
-        time.sleep(3600)  # Push every 1 hour after the first commit
+        time.sleep(3600)  # Wait for 1 hour before the next commit
 
 # Telegram command to manually commit changes
 async def commit_command(update: Update, context: CallbackContext):
     await update.message.reply_text("⏳ Pushing current changes to GitHub...")
-
     push_response = push_commit()
     if push_response:
         await update.message.reply_text("✅ Changes successfully pushed to GitHub!")
     else:
         await update.message.reply_text("❌ Failed to push changes. Check logs for details.")
 
-# Setup Telegram bot
+# Set up the Telegram bot
 app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 app.add_handler(CommandHandler("commit", commit_command))
 
-# Start auto push in a separate thread
-import threading
+# Start the auto-push function in a separate thread so it runs concurrently with the bot
 threading.Thread(target=auto_push, daemon=True).start()
 
-# Run the bot
+# Run the Telegram bot
 app.run_polling()
