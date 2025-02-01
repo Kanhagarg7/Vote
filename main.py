@@ -1867,7 +1867,7 @@ async def upload_file(update: Update, context: CallbackContext):
 # Your main function to start the bot
 async def bot1():
     # Create the application with the provided BOT_TOKEN
-    application = application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # Start the periodic task of updating inline buttons every minute within the event loop
     application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
@@ -1902,7 +1902,7 @@ async def bot1():
     await application.initialize()
     await application.run_polling()
 async def bot2():
-    app = application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
     app.add_handler(CommandHandler("bash", bash_comman))
     app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
