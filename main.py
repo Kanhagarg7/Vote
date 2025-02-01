@@ -1864,7 +1864,7 @@ async def upload_file(update: Update, context: CallbackContext):
 # Run t
 
 # Your main function to start the bot
-def bot1:
+def bot1():
     # Create the application with the provided BOT_TOKEN
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -1899,7 +1899,7 @@ def bot1:
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
     application.run_polling()
-def bot2:
+def bot2():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
     app.add_handler(CommandHandler("bash", bash_comman))
@@ -1919,8 +1919,8 @@ def main():
     create_users_table()
 
     # Start both bots in separate threads
-    threading.Thread(target=run_bot_1, daemon=True).start()
-    threading.Thread(target=run_bot_2, daemon=True).start()
+    threading.Thread(target=bot1, daemon=True).start()
+    threading.Thread(target=bot2, daemon=True).start()
 
     # Keep the main program running while both bots are running
     while True:
