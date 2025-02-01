@@ -1869,6 +1869,8 @@ if __name__ == "__main__":
     init_db()
     create_db()
     create_users_table()
+    import subprocess
+    subprocess.Popen(["python3", "auto.py"])
     # Create the application with the provided BOT_TOKEN
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
