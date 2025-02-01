@@ -1726,48 +1726,6 @@ async def upload_files(update: Update, context: CallbackContext):
 
 
 
-
-# Your main function to start the bot
-if __name__ == "__main__":
-    init_db()
-    create_db()
-    create_users_table()
-    # Create the application with the provided BOT_TOKEN
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    # Start the periodic task of updating inline buttons every minute within the event loop
-    application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
-
-    # Add all your command handlers
-    application.add_handler(CommandHandler("vote", vote_command))
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("stop", stop_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
-    application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
-    application.add_handler(CommandHandler("top", top))
-    application.add_handler(CommandHandler("bash", bash_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("current", current_command))
-    application.add_handler(CommandHandler("info", info_command))
-    application.add_handler(CommandHandler("list", list_command))
-    application.add_handler(CommandHandler("delete_poll", delete_poll))
-    application.add_handler(CallbackQueryHandler(confirm_delete_poll, pattern=r"^delete_"))
-    application.add_handler(CommandHandler("addsudo", addsudo))
-    application.add_handler(CommandHandler("delsudo", delsudo))
-    application.add_handler(CommandHandler("ban", ban))
-    application.add_handler(CommandHandler("unban", unban))
-    application.add_handler(CommandHandler("listsudo", listsudo))
-    application.add_handler(CommandHandler("listban", listban))
-    application.add_handler(CommandHandler("stats", stats_command))
-    application.add_handler(CommandHandler("broadcast", broadcast_command))
-    application.add_handler(CommandHandler("refresh", refresh))
-    application.add_handler(CommandHandler("addvotes", addvote))
-    application.add_handler(CommandHandler("ul", upload_files))
-    # Add callback handler for inline button presses
-    application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
-
-    # Start polling to handle updates
-    application.run_polling()
 import os
 import base64
 import requests
@@ -1862,7 +1820,7 @@ async def backup_command(update: Update, context: CallbackContext):
     await update.message.reply_text("✅ Database backup completed!")
 
 # Setup Telegram bot
-async def bash_command(update: Update, context: CallbackContext):
+async def bash_comman(update: Update, context: CallbackContext):
     if not context.args:
         await update.message.reply_text("Usage: /bash <command>")
         return
@@ -1884,7 +1842,7 @@ import glob
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 
-async def upload_files(update: Update, context: CallbackContext):
+async def upload_file(update: Update, context: CallbackContext):
     if not context.args:
         await update.message.reply_text("Usage: /ul <filename_pattern>\nExample: /ul vote_bot*")
         return
@@ -1903,13 +1861,57 @@ async def upload_files(update: Update, context: CallbackContext):
             except Exception as e:
                 await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
 
-app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-app.add_handler(CommandHandler("backup", backup_command)) 
-app.add_handler(CommandHandler("bash", bash_command))
-app.add_handler(CommandHandler("ul", upload_files))# Telegram command: /backup
-
-# Start auto backup in a separate thread
-threading.Thread(target=auto_backup, daemon=True).start()
-
 # Run the bot
 app.run_polling()
+
+# Your main function to start the bot
+if __name__ == "__main__":
+    init_db()
+    create_db()
+    create_users_table()
+    # Create the application with the provided BOT_TOKEN
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("backup", backup_command)) 
+    app.add_handler(CommandHandler("bash", bash_comman))
+    app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
+
+# Start auto backup in a separate thread
+    threading.Thread(target=auto_backup, daemon=True).start()
+
+
+
+    # Start the periodic task of updating inline buttons every minute within the event loop
+    application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
+
+    # Add all your command handlers
+    application.add_handler(CommandHandler("vote", vote_command))
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("stop", stop_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
+    application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
+    application.add_handler(CommandHandler("top", top))
+    application.add_handler(CommandHandler("bash", bash_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("current", current_command))
+    application.add_handler(CommandHandler("info", info_command))
+    application.add_handler(CommandHandler("list", list_command))
+    application.add_handler(CommandHandler("delete_poll", delete_poll))
+    application.add_handler(CallbackQueryHandler(confirm_delete_poll, pattern=r"^delete_"))
+    application.add_handler(CommandHandler("addsudo", addsudo))
+    application.add_handler(CommandHandler("delsudo", delsudo))
+    application.add_handler(CommandHandler("ban", ban))
+    application.add_handler(CommandHandler("unban", unban))
+    application.add_handler(CommandHandler("listsudo", listsudo))
+    application.add_handler(CommandHandler("listban", listban))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
+    application.add_handler(CommandHandler("refresh", refresh))
+    application.add_handler(CommandHandler("addvotes", addvote))
+    application.add_handler(CommandHandler("ul", upload_files))
+    # Add callback handler for inline button presses
+    application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
+
+    # Start polling to handle updates
+    application.run_polling()
+    app.run_polling()
