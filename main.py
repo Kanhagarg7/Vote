@@ -13,6 +13,7 @@ from telegram.ext import (
 from telegram.helpers import escape_markdown
 
 from telegram.error import BadRequest
+import asyncio 
 import time
 from datetime import *
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -1912,19 +1913,18 @@ def bot2():
 
     # Start polling to handle updates
     app.run_polling()
-def main():
+async def main():
     # Initialize databases and tables
     init_db()
     create_db()
     create_users_table()
 
-    # Start both bots in separate threads
-    threading.Thread(target=bot1, daemon=True).start()
-    threading.Thread(target=bot2, daemon=True).start()
-
-    # Keep the main program running while both bots are running
-    while True:
-        pass
+    # Start both bots using asyncio.gather() to run concurrently
+    await asyncio.gather(
+        asyncio.to_thread(bot1),  # Run bot1 in a separate thread
+        asyncio.to_thread(bot2),  # Run bot2 in a separate thread
+    )
 
 if __name__ == "__main__":
-    main()
+    # Run the main function using asyncio
+    asyncio.run(main())
