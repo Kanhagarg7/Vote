@@ -1019,13 +1019,6 @@ async def delete_poll(update: Update, context: CallbackContext):
     await update.message.reply_text(confirm_message, reply_markup=reply_markup)
 
 import re
-
-# Function to extract message ID from URL
-def extract_message_id_from_url(url: str) -> int:
-    match = re.search(r'/(\d+)$', url)
-    if match:
-        return int(match.group(1))  # Return the message ID as an integer
-    return None  # Return None if the URL is not in the correct format
 import telegram
 import re
 
@@ -1037,9 +1030,9 @@ def escape_markdown_v2(text):
 def fix_markdown_links(text):
     """
     Fixes MarkdownV2 links by ensuring they follow the correct format.
-    Proper format: [text](url) → text\[url\]
+    Proper format: [text](url) → text (url)
     """
-    return re.sub(r'\[(.*?)\]\((.*?)\)', r'\1\\(\2\\)', text)
+    return re.sub(r'\[(.*?)\]\((.*?)\)', r'\1 (\2)', text)
 
 async def confirm_delete_poll(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1123,7 +1116,12 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
     else:
         await query.edit_message_text(text="Poll disqualification canceled.")
 
-
+# Function to extract message ID from URL
+def extract_message_id_from_url(url: str) -> int:
+    match = re.search(r'/(\d+)$', url)
+    if match:
+        return int(match.group(1))  # Return the message ID as an integer
+    return None  # Return None if the URL is not in the correct format
 def get_poll_info(poll_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
