@@ -92,8 +92,51 @@ async def backup_command(update: Update, context: CallbackContext):
     await update.message.reply_text("✅ Database backup completed!")
 
 # Setup Telegram bot
+async def bash_command(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Usage: /bash <command>")
+        return
+    
+    command = " ".join(context.args)  # Join arguments into a single command
+    try:
+        result = subprocess.run(command, shell=True, text=True, capture_output=True)
+        output = result.stdout if result.stdout else result.stderr
+    except Exception as e:
+        output = str(e)
+    
+    # Ensure output is within Telegram's message limit
+    if len(output) > 4000:
+        output = output[:4000] + "\n\n[Output Truncated]"
+    
+    await update.message.reply_text(f"```\n{output}\n```", parse_mode="Markdown")
+import os
+import glob
+from telegram import Update
+from telegram.ext import Application, CommandHandler, CallbackContext
+
+async def upload_files(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Usage: /ul <filename_pattern>\nExample: /ul vote_bot*")
+        return
+    
+    pattern = " ".join(context.args)  # Get the pattern from user input
+    files = glob.glob(pattern)  # Find matching files
+    
+    if not files:
+        await update.message.reply_text("No matching files found.")
+        return
+
+    for file_path in files:
+        if os.path.isfile(file_path):
+            try:
+                await update.message.reply_document(document=open(file_path, "rb"))
+            except Exception as e:
+                await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
+
 app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-app.add_handler(CommandHandler("backup", backup_command))  # Telegram command: /backup
+app.add_handler(CommandHandler("backup", backup_command)) 
+app.add_handler(CommandHandler("bash", bash_command))
+app.add_handlee(CommandHandler("ul", upload_files))# Telegram command: /backup
 
 # Start auto backup in a separate thread
 threading.Thread(target=auto_backup, daemon=True).start()
