@@ -1902,7 +1902,7 @@ async def bot1():
     await application.initialize()
     await application.run_polling()
 async def bot2():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = applicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
     app.add_handler(CommandHandler("bash", bash_comman))
     app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
