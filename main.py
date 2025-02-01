@@ -1899,7 +1899,8 @@ def bot1():
     application.add_handler(CommandHandler("ul", upload_files))
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
-    application.run_polling()
+    await application.initialize()
+    await application.run_polling()
 def bot2():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
@@ -1912,7 +1913,8 @@ def bot2():
 
 
     # Start polling to handle updates
-    app.run_polling()
+    await app.initialize()
+    await app.run_polling()
 import asyncio
 
 async def main():
