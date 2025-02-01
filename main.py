@@ -18,7 +18,6 @@ from datetime import *
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, ContextTypes
 import sqlite3
-from datetime import datetime
 img_path = "img/img.png"
 BOT_TOKEN = "7948701239:AAHceJ4o62b327roKIPoIwK4tFd58_aSfVA"
 redis_uri = "redis://redis-18180.c85.us-east-1-2.ec2.redns.redis-cloud.com:18180"
@@ -1701,6 +1700,31 @@ async def bash_command(update: Update, context: CallbackContext):
         output = output[:4000] + "\n\n[Output Truncated]"
     
     await update.message.reply_text(f"```\n{output}\n```", parse_mode="Markdown")
+import os
+import glob
+from telegram import Update
+from telegram.ext import Application, CommandHandler, CallbackContext
+
+async def upload_files(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Usage: /ul <filename_pattern>\nExample: /ul vote_bot*")
+        return
+    
+    pattern = " ".join(context.args)  # Get the pattern from user input
+    files = glob.glob(pattern)  # Find matching files
+    
+    if not files:
+        await update.message.reply_text("No matching files found.")
+        return
+
+    for file_path in files:
+        if os.path.isfile(file_path):
+            try:
+                await update.message.reply_document(document=open(file_path, "rb"))
+            except Exception as e:
+                await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
+
+
 
 
 # Your main function to start the bot
@@ -1721,7 +1745,7 @@ if __name__ == "__main__":
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
     application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
     application.add_handler(CommandHandler("top", top))
-    application.add_handler(CommandHandler("bash", bash_command))
+    applicayion.add_handler(CommandHandler("bash", bash_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("current", current_command))
     application.add_handler(CommandHandler("info", info_command))
@@ -1738,7 +1762,7 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("refresh", refresh))
     application.add_handler(CommandHandler("addvotes", addvote))
-
+    application.add_handler(CommandHandler("ul", upload_files))
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
 
