@@ -1913,6 +1913,8 @@ def bot2():
 
     # Start polling to handle updates
     app.run_polling()
+import asyncio
+
 async def main():
     # Initialize databases and tables
     init_db()
@@ -1926,5 +1928,14 @@ async def main():
     )
 
 if __name__ == "__main__":
-    # Run the main function using asyncio
-    asyncio.run(main())
+    # Check if the event loop is already running
+    try:
+        loop = asyncio.get_event_loop()
+        # Only run the event loop if it's not already running
+        if loop.is_running():
+            # This allows for multiple bots to run concurrently in an already running loop
+            loop.create_task(main())  # Create a new task and let the existing event loop handle it
+        else:
+            asyncio.run(main())  # If the loop isn't running, we run it
+    except RuntimeError:
+        asyncio.run(main())  # If there is any error with get_event_loop(), run normally
