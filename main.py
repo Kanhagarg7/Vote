@@ -1865,7 +1865,7 @@ async def upload_file(update: Update, context: CallbackContext):
 # Run t
 
 # Your main function to start the bot
-def bot1():
+async def bot1():
     # Create the application with the provided BOT_TOKEN
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -1901,7 +1901,7 @@ def bot1():
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
     await application.initialize()
     await application.run_polling()
-def bot2():
+async def bot2():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
     app.add_handler(CommandHandler("bash", bash_comman))
