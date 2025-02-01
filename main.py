@@ -1745,7 +1745,7 @@ if __name__ == "__main__":
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
     application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
     application.add_handler(CommandHandler("top", top))
-    applicayion.add_handler(CommandHandler("bash", bash_command))
+    application.add_handler(CommandHandler("bash", bash_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("current", current_command))
     application.add_handler(CommandHandler("info", info_command))
