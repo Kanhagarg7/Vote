@@ -1861,8 +1861,7 @@ async def upload_file(update: Update, context: CallbackContext):
             except Exception as e:
                 await update.message.reply_text(f"Error uploading {file_path}: {str(e)}")
 
-# Run the bot
-app.run_polling()
+# Run t
 
 # Your main function to start the bot
 if __name__ == "__main__":
