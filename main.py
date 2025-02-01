@@ -1020,19 +1020,28 @@ async def delete_poll(update: Update, context: CallbackContext):
 
 import re
 import telegram
-import re
+from telegram import Update
+from telegram.ext import CallbackContext
 
-def escape_markdown_v2(text):
-    """Escapes special characters for Telegram MarkdownV2."""
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+def escape_html(text):
+    """Escapes special characters for HTML."""
+    escape_map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#x27;',
+        '/': '&#x2F;',
+        '\\': '&#92;',
+    }
+    return ''.join(escape_map.get(c, c) for c in text)
 
-def fix_markdown_links(text):
+def fix_html_links(text):
     """
-    Fixes MarkdownV2 links by ensuring they follow the correct format.
-    Proper format: [text](url) → text (url)
+    Fixes HTML links by ensuring they follow the correct format.
+    Proper format: <a href="url">text</a> → text (url)
     """
-    return re.sub(r'\[(.*?)\]\((.*?)\)', r'\1 (\2)', text)
+    return re.sub(r'<a href="(.*?)">(.*?)</a>', r'\2 (\1)', text)
 
 async def confirm_delete_poll(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1077,28 +1086,28 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             # Check if the message is a photo or text
             if message.caption:
                 # Escape caption before applying strikethrough formatting
-                escaped_caption = escape_markdown_v2(message.caption)
-                fixed_caption = fix_markdown_links(escaped_caption)  # Fix broken links
-                updated_caption = f"~~{fixed_caption}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+                escaped_caption = escape_html(message.caption)
+                fixed_caption = fix_html_links(escaped_caption)  # Fix broken links
+                updated_caption = f"<s>{fixed_caption}</s>\n\n<b>THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY</b>"
 
                 await context.bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     caption=updated_caption,
-                    parse_mode=telegram.constants.ParseMode.MARKDOWN_V2,
+                    parse_mode=telegram.constants.ParseMode.HTML,
                     reply_markup=None  # Remove inline buttons
                 )
             else:
                 # Escape text before applying strikethrough formatting
-                escaped_text = escape_markdown_v2(message.text)
-                fixed_text = fix_markdown_links(escaped_text)  # Fix broken links
-                updated_text = f"~~{fixed_text}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+                escaped_text = escape_html(message.text)
+                fixed_text = fix_html_links(escaped_text)  # Fix broken links
+                updated_text = f"<s>{fixed_text}</s>\n\n<b>THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY</b>"
 
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     text=updated_text,
-                    parse_mode=telegram.constants.ParseMode.MARKDOWN_V2,
+                    parse_mode=telegram.constants.ParseMode.HTML,
                     reply_markup=None  # Remove inline buttons
                 )
 
