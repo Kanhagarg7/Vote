@@ -1071,22 +1071,22 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             # Check if the message is a photo or text
             if message.caption:
                 # If the message has a caption (photo message), update the caption
-                updated_caption = ~~message.caption~~ + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
+                updated_caption = f'~~{message.caption}~~ + "\n\nTHIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY"'
                 await context.bot.edit_message_caption(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     caption=updated_caption,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_markup=None  # Remove inline buttons
                 )
             else:
                 # If it's a text message, update the text
-                updated_text = message.text + "\n\n**THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY**"
+                updated_text = f'~~{message.text}~~ + "\n\nTHIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY"'
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     text=updated_text,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_markup=None  # Remove inline buttons
                 )
 
