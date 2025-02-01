@@ -1,112 +1,102 @@
 import os
+import base64
 import requests
-from datetime import datetime
 import time
+from datetime import datetime
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 import threading
 
-# Telegram Bot Token (set in code or as environment variable)
+# Telegram Bot Token
 TELEGRAM_BOT_TOKEN = "7469236370:AAH0_dD-7ZjdbepID5z2YhKjY_FpSX6K6Qg"
 
-# GitHub Credentials (GH_TOKEN must be set in Heroku's config vars)
-GIT_TOKEN = os.getenv("GH_TOKEN")
+# GitHub Credentials
+GIT_TOKEN = os.getenv("GH_TOKEN")  # GitHub token stored in Heroku environment
 GIT_USERNAME = "Votingbotm"
 GIT_REPO = "Vote"
 GIT_API_URL = "https://api.github.com"
 GIT_BRANCH = "main"
 
 if not GIT_TOKEN:
-    raise ValueError("GitHub token is not set in environment variables!")
+    raise ValueError("❌ GitHub token is missing in environment variables!")
 
-# Function to create a commit on GitHub using the correct tree SHA
-def create_commit():
-    url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/branches/{GIT_BRANCH}"
-    headers = {"Authorization": f"token {GIT_TOKEN}"}
+# Function to upload a file to GitHub
+def upload_to_github(file_path, github_path):
+    """Uploads a file (SQLite DB) to GitHub using the API."""
     
-    # Fetch branch details
+    url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/contents/{github_path}"
+    headers = {"Authorization": f"token {GIT_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+
+    # Read the file and encode it as Base64
+    try:
+        with open(file_path, "rb") as file:
+            content = base64.b64encode(file.read()).decode("utf-8")
+    except FileNotFoundError:
+        print(f"⚠ File not found: {file_path}")
+        return None
+
+    # Get the latest SHA of the file (required for updating an existing file)
     response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print(f"❌ GitHub API Error: {response.status_code} - {response.json()}")
-        return None
+    sha = None
+    if response.status_code == 200:  # File exists, get SHA
+        sha = response.json().get("sha")
 
-    branch_data = response.json()
-    commit_sha = branch_data.get("commit", {}).get("sha")
-    
-    if not commit_sha:
-        print("⚠ No commit SHA found! Check if the branch exists.")
-        return None
-
-    # Get the latest commit details to fetch the correct tree SHA
-    commit_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/commits/{commit_sha}"
-    commit_response = requests.get(commit_url, headers=headers)
-    
-    if commit_response.status_code != 200:
-        print(f"❌ Error fetching commit details: {commit_response.json()}")
-        return None
-
-    commit_data = commit_response.json()
-    tree_sha = commit_data.get("tree", {}).get("sha")
-    if not tree_sha:
-        print("⚠ No tree SHA found! Cannot proceed.")
-        return None
-
-    # Create the commit with the correct tree SHA
-    commit_message = f"Auto commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    new_commit_data = {
+    # Prepare commit data
+    commit_message = f"📦 Auto Backup: {os.path.basename(file_path)} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    data = {
         "message": commit_message,
-        "tree": tree_sha,
-        "parents": [commit_sha]
+        "content": content,
+        "branch": GIT_BRANCH
     }
+    if sha:
+        data["sha"] = sha  # Required for updating an existing file
 
-    commit_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/commits"
-    new_commit_response = requests.post(commit_url, json=new_commit_data, headers=headers)
-    if new_commit_response.status_code != 201:
-        print(f"❌ Commit creation failed: {new_commit_response.json()}")
+    # Upload file to GitHub
+    upload_response = requests.put(url, json=data, headers=headers)
+    
+    if upload_response.status_code in [200, 201]:
+        print(f"✅ Successfully uploaded {file_path} to GitHub.")
+        return upload_response.json()
+    else:
+        print(f"❌ Upload failed for {file_path}: {upload_response.json()}")
         return None
 
-    return new_commit_response.json()
+# Function to backup database files
+def backup_databases():
+    """Backs up both SQLite database files to GitHub."""
+    files_to_backup = {
+        "vote_bot.db": "vote_bot.db",
+        "bot_main.db": "bot_main.db"
+    }
+    
+    for local_path, github_path in files_to_backup.items():
+        upload_to_github(local_path, github_path)
 
-# Function to push the commit to GitHub by updating the branch reference
-def push_commit():
-    commit_response = create_commit()
-    if commit_response is None:
-        return None
-
-    new_commit_sha = commit_response["sha"]
-    push_data = {"sha": new_commit_sha}
-    push_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/refs/heads/{GIT_BRANCH}"
-    push_response = requests.patch(push_url, json=push_data, headers={"Authorization": f"token {GIT_TOKEN}"})
-    return push_response.json()
-
-# Auto-push function: waits one hour, then pushes commits every hour.
-def auto_push():
-    print("Waiting for 1 hour before starting the first commit...")
-    time.sleep(3600)  # Wait for 1 hour before the first commit
+# Auto backup function with initial 1-hour delay
+def auto_backup():
+    """Waits for 1 hour before starting, then backs up every 1 hour."""
+    print("🕒 Waiting 1 hour before first commit...")
+    time.sleep(3600)  # Wait for 1 hour
 
     while True:
-        push_response = push_commit()
-        if push_response:
-            print(f"✅ Changes pushed: {push_response}")
-        else:
-            print("⚠ No changes pushed due to an error.")
+        print("🔄 Running backup...")
+        backup_databases()
         time.sleep(3600)  # Wait for 1 hour before the next commit
 
-# Telegram command to manually commit changes
-async def commit_command(update: Update, context: CallbackContext):
-    await update.message.reply_text("⏳ Pushing current changes to GitHub...")
-    push_response = push_commit()
-    if push_response:
-        await update.message.reply_text("✅ Changes successfully pushed to GitHub!")
-    else:
-        await update.message.reply_text("❌ Failed to push changes. Check logs for details.")
+# Telegram command to manually trigger backup
+async def backup_command(update: Update, context: CallbackContext):
+    """Telegram command to manually trigger backup."""
+    await update.message.reply_text("⏳ Backing up database files...")
 
-# Set up the Telegram bot
+    backup_databases()
+    await update.message.reply_text("✅ Database backup completed!")
+
+# Setup Telegram bot
 app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-app.add_handler(CommandHandler("commit", commit_command))
+app.add_handler(CommandHandler("backup", backup_command))  # Telegram command: /backup
 
-# Start the auto-push function in a separate thread so it runs concurrently with the bot
-threading.Thread(target=auto_push, daemon=True).start()
+# Start auto backup in a separate thread
+threading.Thread(target=auto_backup, daemon=True).start()
 
-# Run the Telegram bot
+# Run the bot
 app.run_polling()
