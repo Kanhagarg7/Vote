@@ -1865,9 +1865,12 @@ async def upload_file(update: Update, context: CallbackContext):
 # Run t
 
 # Your main function to start the bot
-def bot1():
+if __name__ == "__main__":
+    init_db()
+    create_db()
+    create_users_table()
     # Create the application with the provided BOT_TOKEN
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Start the periodic task of updating inline buttons every minute within the event loop
     application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
@@ -1879,7 +1882,6 @@ def bot1():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_channel_username))
     application.add_handler(CallbackQueryHandler(handle_vote, pattern=r"^vote:"))
     application.add_handler(CommandHandler("top", top))
-    application.add_handler(CommandHandler("bash", bash_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("current", current_command))
     application.add_handler(CommandHandler("info", info_command))
@@ -1896,46 +1898,10 @@ def bot1():
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("refresh", refresh))
     application.add_handler(CommandHandler("addvotes", addvote))
-    application.add_handler(CommandHandler("ul", upload_files))
+
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
-    application.run_polling()
-def bot2():
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    app.add_handler(CommandHandler("backup", backup_command)) 
-    app.add_handler(CommandHandler("bash", bash_comman))
-    app.add_handler(CommandHandler("ul", upload_file))# Telegram command: /backup
-
-# Start auto backup in a separate thread
-    threading.Thread(target=auto_backup, daemon=True).start()
-
-
 
     # Start polling to handle updates
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    try:
-        # Initialize databases
-        init_db()
-        create_db()
-        create_users_table()
-
-        # Run both bots concurrently
-        from threading import Thread
-        
-        # Create threads for both bots
-        thread1 = Thread(target=bot1)
-        thread2 = Thread(target=bot2)
-
-        # Start the threads
-        thread1.start()
-        thread2.start()
-
-        # Wait for both threads to finish
-        thread1.join()
-        thread2.join()
-
-    except Exception as e:
-        print(f"Error occurred: {e}")
+    application.run_polling()
+    
