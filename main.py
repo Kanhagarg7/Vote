@@ -1026,13 +1026,20 @@ def extract_message_id_from_url(url: str) -> int:
     if match:
         return int(match.group(1))  # Return the message ID as an integer
     return None  # Return None if the URL is not in the correct format
-
 import telegram
+import re
 
 def escape_markdown_v2(text):
     """Escapes special characters for Telegram MarkdownV2."""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+
+def fix_markdown_links(text):
+    """
+    Fixes MarkdownV2 links by ensuring they follow the correct format.
+    Proper format: [text](url) → text\[url\]
+    """
+    return re.sub(r'\[(.*?)\]\((.*?)\)', r'\1\\(\2\\)', text)
 
 async def confirm_delete_poll(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1062,7 +1069,6 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             return
 
         chat_id = f"@{channel_username}"
-
         update_status = []
 
         try:
@@ -1079,7 +1085,8 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             if message.caption:
                 # Escape caption before applying strikethrough formatting
                 escaped_caption = escape_markdown_v2(message.caption)
-                updated_caption = f"~~{escaped_caption}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+                fixed_caption = fix_markdown_links(escaped_caption)  # Fix broken links
+                updated_caption = f"~~{fixed_caption}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
 
                 await context.bot.edit_message_caption(
                     chat_id=chat_id,
@@ -1091,7 +1098,8 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
             else:
                 # Escape text before applying strikethrough formatting
                 escaped_text = escape_markdown_v2(message.text)
-                updated_text = f"~~{escaped_text}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
+                fixed_text = fix_markdown_links(escaped_text)  # Fix broken links
+                updated_text = f"~~{fixed_text}~~\n\n*THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY*"
 
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
@@ -1114,6 +1122,7 @@ async def confirm_delete_poll(update: Update, context: CallbackContext):
 
     else:
         await query.edit_message_text(text="Poll disqualification canceled.")
+
 
 def get_poll_info(poll_id):
     conn = sqlite3.connect("vote_bot.db")
