@@ -22,22 +22,40 @@ if not GIT_TOKEN:
 def create_commit():
     url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/branches/{GIT_BRANCH}"
     headers = {"Authorization": f"token {GIT_TOKEN}"}
+    
+    # Fetch branch details
     response = requests.get(url, headers=headers)
-
     if response.status_code != 200:
         print(f"❌ GitHub API Error: {response.status_code} - {response.json()}")
         return None
 
     branch_data = response.json()
     commit_sha = branch_data.get("commit", {}).get("sha")
+    
     if not commit_sha:
         print("⚠ No commit SHA found! Check if the branch exists.")
         return None
 
+    # Get the latest commit details to fetch the correct tree SHA
+    commit_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/commits/{commit_sha}"
+    commit_response = requests.get(commit_url, headers=headers)
+    
+    if commit_response.status_code != 200:
+        print(f"❌ Error fetching commit details: {commit_response.json()}")
+        return None
+
+    commit_data = commit_response.json()
+    tree_sha = commit_data.get("tree", {}).get("sha")
+
+    if not tree_sha:
+        print("⚠ No tree SHA found! Cannot proceed.")
+        return None
+
+    # Create the commit with the correct tree SHA
     commit_message = f"Auto commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     commit_data = {
         "message": commit_message,
-        "tree": commit_sha,
+        "tree": tree_sha,  # Use the correct tree SHA
         "parents": [commit_sha]
     }
 
@@ -49,20 +67,6 @@ def create_commit():
         return None
 
     return commit_response.json()
-
-# Push commit to GitHub
-def push_commit():
-    commit_response = create_commit()
-    if commit_response is None:
-        return None
-
-    commit_sha = commit_response["sha"]
-    push_url = f"{GIT_API_URL}/repos/{GIT_USERNAME}/{GIT_REPO}/git/refs/heads/{GIT_BRANCH}"
-    push_data = {"sha": commit_sha}
-
-    push_response = requests.patch(push_url, json=push_data, headers={"Authorization": f"token {GIT_TOKEN}"})
-
-    return push_response.json()
 
 # Auto-push function (Starts after 1 hour)
 def auto_push():
