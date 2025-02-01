@@ -136,7 +136,7 @@ async def upload_files(update: Update, context: CallbackContext):
 app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 app.add_handler(CommandHandler("backup", backup_command)) 
 app.add_handler(CommandHandler("bash", bash_command))
-app.add_handlee(CommandHandler("ul", upload_files))# Telegram command: /backup
+app.add_handler(CommandHandler("ul", upload_files))# Telegram command: /backup
 
 # Start auto backup in a separate thread
 threading.Thread(target=auto_backup, daemon=True).start()
