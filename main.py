@@ -1928,14 +1928,11 @@ async def main():
     )
 
 if __name__ == "__main__":
-    # Check if the event loop is already running
     try:
-        loop = asyncio.get_event_loop()
-        # Only run the event loop if it's not already running
-        if loop.is_running():
-            # This allows for multiple bots to run concurrently in an already running loop
-            loop.create_task(main())  # Create a new task and let the existing event loop handle it
-        else:
-            asyncio.run(main())  # If the loop isn't running, we run it
+        # Directly use asyncio.run to run the main coroutine
+        asyncio.run(main())
     except RuntimeError:
-        asyncio.run(main())  # If there is any error with get_event_loop(), run normally
+        # In case the loop is already running (like in some environments), just call the main function directly
+        loop = asyncio.get_event_loop()
+        loop.create_task(main())
+        loop.run_forever()
