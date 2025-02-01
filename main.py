@@ -1865,7 +1865,7 @@ async def upload_file(update: Update, context: CallbackContext):
 # Run t
 
 # Your main function to start the bot
-async def bot1():
+def bot1():
     # Create the application with the provided BOT_TOKEN
     application = Application.builder().token(BOT_TOKEN).build()
 
@@ -1899,9 +1899,8 @@ async def bot1():
     application.add_handler(CommandHandler("ul", upload_files))
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
-    await application.initialize()
-    await application.run_polling()
-async def bot2():
+    application.run_polling()
+def bot2():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("backup", backup_command)) 
     app.add_handler(CommandHandler("bash", bash_comman))
@@ -1913,25 +1912,30 @@ async def bot2():
 
 
     # Start polling to handle updates
-    await app.initialize()
-    await app.run_polling()
-import asyncio
+    app.run_polling()
 
-async def main():
-    # Initialize databases and tables
-    init_db()
-    create_db()
-    create_users_table()
-
-    # Run both bots concurrently using asyncio.gather
-    await asyncio.gather(
-        bot1(),  # Bot1 polling
-        bot2(),  # Bot2 polling
-    )
 
 if __name__ == "__main__":
     try:
-        # Directly call the main function
-        asyncio.run(main())  # This is enough since asyncio handles the event loop internally
+        # Initialize databases
+        init_db()
+        create_db()
+        create_users_table()
+
+        # Run both bots concurrently
+        from threading import Thread
+        
+        # Create threads for both bots
+        thread1 = Thread(target=bot1)
+        thread2 = Thread(target=bot2)
+
+        # Start the threads
+        thread1.start()
+        thread2.start()
+
+        # Wait for both threads to finish
+        thread1.join()
+        thread2.join()
+
     except Exception as e:
         print(f"Error occurred: {e}")
