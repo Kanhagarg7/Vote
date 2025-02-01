@@ -1919,10 +1919,10 @@ async def main():
     create_db()
     create_users_table()
 
-    # Start both bots using asyncio.gather() to run concurrently
+    # Run both bots concurrently using asyncio.gather
     await asyncio.gather(
-        asyncio.to_thread(bot1),  # Run bot1 in a separate thread
-        asyncio.to_thread(bot2),  # Run bot2 in a separate thread
+        bot1(),  # Bot1 polling
+        bot2(),  # Bot2 polling
     )
 
 if __name__ == "__main__":
