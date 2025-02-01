@@ -1931,10 +1931,9 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Directly use asyncio.run to run the main coroutine
-        asyncio.run(main())
-    except RuntimeError:
-        # In case the loop is already running (like in some environments), just call the main function directly
+        # Get the existing event loop and run the main function
         loop = asyncio.get_event_loop()
         loop.create_task(main())
-        loop.run_forever()
+        loop.run_forever()  # Keep the loop running
+    except RuntimeError as e:
+        print(f"RuntimeError: {e}")
