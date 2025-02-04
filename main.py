@@ -1610,15 +1610,16 @@ async def update_inline_button_periodically(context):
 
             # Ensure message_channel_id is an integer if it exists
             if message_channel_id:
-                try:
-                    message_channel_id = int(message_channel_id)
-                except ValueError:
-                    print(f"❌ Poll {poll_id}: Invalid message_channel_id. Skipping poll...")
-                    continue  # Skip if message_channel_id is not a valid integer
+                # Regex to extract numbers from a URL (e.g., 'https://t.me/somechannel/12345')
+                match = re.search(r'(\d+)', str(message_channel_id))  # Match digits in message_channel_id
+                if match:
+                    message_channel_id = int(match.group(1))  # This extracts and converts the number
+                else:
+                    print(f"❌ Poll {poll_id}: No valid numeric value found in message_channel_id. Skipping poll...")
+                    continue  # Skip if no valid numeric value found
             else:
-                print(f"❌ Poll {poll_id} has no valid message_channel_id. Skipping poll...")
-                continue  # Skip if message_channel_id is missing
-
+                print(f"❌ Poll {poll_id} has no message_channel_id. Skipping poll...")
+                continue  # Skip if message_channel_id
             print(f"Checking membership and updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
 
             # Check membership of users who voted in this poll
@@ -1695,16 +1696,16 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
     for poll in polls:
         poll_id, channel_username, message_channel_id, votes, message_id = poll
         if message_channel_id:
-                try:
-                    message_channel_id = int(message_channel_id)
-                except ValueError:
-                    print(f"❌ Poll {poll_id}: Invalid message_channel_id. Skipping poll...")
-                    continue  # Skip if message_channel_id is not a valid integer
-        else:
-            print(f"❌ Poll {poll_id} has no valid message_channel_id. Skipping poll...")
-            continue
-        # Extract the message ID from the URL (if it's a URL)
-        
+                # Regex to extract numbers from a URL (e.g., 'https://t.me/somechannel/12345')
+                match = re.search(r'(\d+)', str(message_channel_id))  # Match digits in message_channel_id
+                if match:
+                    message_channel_id = int(match.group(1))  # This extracts and converts the number
+                else:
+                    print(f"❌ Poll {poll_id}: No valid numeric value found in message_channel_id. Skipping poll...")
+                    continue  # Skip if no valid numeric value found
+            else:
+                print(f"❌ Poll {poll_id} has no message_channel_id. Skipping poll...")
+                continue  # Skip if message_channel_id
         print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
 
         # Create the new inline button with updated vote count
