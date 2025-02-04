@@ -1700,26 +1700,26 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
                 except ValueError:
                     print(f"❌ Poll {poll_id}: Invalid message_channel_id. Skipping poll...")
                     continue  # Skip if message_channel_id is not a valid integer
-            else:
-                print(f"❌ Poll {poll_id} has no valid message_channel_id. Skipping poll...")
-                continue
+        else:
+            print(f"❌ Poll {poll_id} has no valid message_channel_id. Skipping poll...")
+            continue
         # Extract the message ID from the URL (if it's a URL)
         
-            print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+        print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
 
         # Create the new inline button with updated vote count
-            new_button = InlineKeyboardMarkup(
-                [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
-            )
+        new_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+        )
 
-            try:
+        try:
             # Try to update the message in the channel with the new inline button
-                await context.bot.edit_message_reply_markup(
-                    chat_id=f"@{channel_username}",  # Correct channel username
-                    message_id=int(message_channel_id),  # Convert message_channel_id to integer
-                    reply_markup=new_button
-                )
-            except TelegramError as e:
+            await context.bot.edit_message_reply_markup(
+                chat_id=f"@{channel_username}",  # Correct channel username
+                message_id=int(message_channel_id),  # Convert message_channel_id to integer
+                reply_markup=new_button
+            )
+        except TelegramError as e:
             # If the message is not found or any other Telegram-related issue, log and inform the user
                 if "Message to edit not found" in str(e):
                     print(f"Message with ID {message_channel_id} not found.")
