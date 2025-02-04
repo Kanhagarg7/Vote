@@ -1581,11 +1581,9 @@ async def addvote(update: Update, context: CallbackContext):
         await update.message.reply_text("Invalid input. Please use the correct format: /addvote <poll_id> <no_of_votes>.")
     except Exception as e:
         await update.message.reply_text(f"An error occurred: {e}")
-import asyncio
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import sqlite3
 import re
+import sqlite3
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, TelegramError
 
 async def update_inline_button_periodically(context):
     """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
@@ -1619,7 +1617,8 @@ async def update_inline_button_periodically(context):
                     continue  # Skip if no valid numeric value found
             else:
                 print(f"❌ Poll {poll_id} has no message_channel_id. Skipping poll...")
-                continue  # Skip if message_channel_id
+                continue  # Skip if message_channel_id is None
+
             print(f"Checking membership and updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
 
             # Check membership of users who voted in this poll
@@ -1644,7 +1643,6 @@ async def update_inline_button_periodically(context):
             await update_vote_count_and_inline_button(poll_id, message_id, context)
 
         conn.close()
-        
 
 def decrease_vote_count(poll_id, user_id):
     """ Remove only one vote from the poll for the specific user when they leave the channel. """
@@ -1677,61 +1675,61 @@ def decrease_vote_count(poll_id, user_id):
 
     conn.close()
 
-
-channel_username = "Trusted_Seller_of_Pd"
 async def update_vote_count_and_inline_button(poll_id, message_id, context):
     """ Updates the vote count and inline button after checking membership """
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
-    """)
-    polls = cursor.fetchall()
+        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls WHERE poll_id = ?
+    """, (poll_id,))
+    poll = cursor.fetchone()
 
-    if not polls:
-        await update.message.reply_text("❌ No polls found to refresh.")
+    if not poll:
+        print(f"❌ Poll {poll_id} not found.")
         return
 
-    # Loop through all pollsand update the inline buttons for each message
-    for poll in polls:
-        poll_id, channel_username, message_channel_id, votes, message_id = poll
-        if message_channel_id:
-                # Regex to extract numbers from a URL (e.g., 'https://t.me/somechannel/12345')
-                match = re.search(r'(\d+)', str(message_channel_id))  # Match digits in message_channel_id
-                if match:
-                    message_channel_id = int(match.group(1))  # This extracts and converts the number
-                else:
-                    print(f"❌ Poll {poll_id}: No valid numeric value found in message_channel_id. Skipping poll...")
-                    continue  # Skip if no valid numeric value found
-            else:
-                print(f"❌ Poll {poll_id} has no message_channel_id. Skipping poll...")
-                continue  # Skip if message_channel_id
-        print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+    poll_id, channel_username, message_channel_id, votes, message_id = poll
 
-        # Create the new inline button with updated vote count
-        new_button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+    # Ensure message_channel_id is an integer if it exists
+    if message_channel_id:
+        # Regex to extract numbers from a URL (e.g., 'https://t.me/somechannel/12345')
+        match = re.search(r'(\d+)', str(message_channel_id))  # Match digits in message_channel_id
+        if match:
+            message_channel_id = int(match.group(1))  # This extracts and converts the number
+        else:
+            print(f"❌ Poll {poll_id}: No valid numeric value found in message_channel_id. Skipping poll...")
+            return  # Skip if no valid numeric value found
+    else:
+        print(f"❌ Poll {poll_id} has no message_channel_id. Skipping poll...")
+        return  # Skip if message_channel_id is None
+
+    print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
+
+    # Create the new inline button with updated vote count
+    new_button = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+    )
+
+    try:
+        # Try to update the message in the channel with the new inline button
+        await context.bot.edit_message_reply_markup(
+            chat_id=f"@{channel_username}",  # Correct channel username
+            message_id=int(message_channel_id),  # Convert message_channel_id to integer
+            reply_markup=new_button
         )
-
-        try:
-            # Try to update the message in the channel with the new inline button
-            await context.bot.edit_message_reply_markup(
-                chat_id=f"@{channel_username}",  # Correct channel username
-                message_id=int(message_channel_id),  # Convert message_channel_id to integer
-                reply_markup=new_button
-            )
-        except TelegramError as e:
-            # If the message is not found or any other Telegram-related issue, log and inform the user
-                if "Message to edit not found" in str(e):
-                    print(f"Message with ID {message_channel_id} not found.")
-                    print(f"❌ Failed to update poll {poll_id}: Message not found.")
-                
-                # Optionally re-send the poll
-                    await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
-                else:
-                    print(f"Error updating poll {poll_id}: {e}")
-                    print(f"❌ Failed to update poll {poll_id}: {e}")
-
+    except TelegramError as e:
+        # If the message is not found or any other Telegram-related issue, log and inform the user
+        if "Message to edit not found" in str(e):
+            print(f"Message with ID {message_channel_id} not found.")
+            print(f"❌ Failed to update poll {poll_id}: Message not found.")
+            
+            # Optionally re-send the poll
+            await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
+        else:
+            print(f"Error updating poll {poll_id}: {e}")
+            print(f"❌ Failed to update poll {poll_id}: {e}")
+    
+    conn.close()
 # Your main function to start the bot
 if __name__ == "__main__":
     init_db()
