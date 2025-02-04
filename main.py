@@ -253,7 +253,7 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
         while retry_count < max_retries:
             try:
                 # ✅ Fetch the actual message to check reply_markup (fix for the error)
-                current_message = await context.bot.get_chat_message(f"@{channel_username}", message_channel_id)
+                current_message = await context.bot.get_message(f"@{channel_username}", message_channel_id)
                 
                 if current_message and current_message.reply_markup == new_button:
                     print(f"⏭️ Poll {poll_id} skipped: No changes in inline buttons.")
