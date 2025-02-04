@@ -248,13 +248,7 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         try:
-            # Try to fetch the message
-            current_message = await context.bot.get_message(f"@{channel_username}", message_channel_id)
-
-            # If the message is not found, skip this poll
-            if not current_message:
-                print(f"❌ Poll {poll_id}: Message not found. Skipping poll...")
-                continue  # Skip if the message does not exist
+            
 
             # Update the inline buttons
             await asyncio.sleep(1)  # Avoid Telegram rate limits
