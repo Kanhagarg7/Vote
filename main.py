@@ -1585,7 +1585,7 @@ async def addvote(update: Update, context: CallbackContext):
 async def update_inline_button_periodically(context):
     """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
     while True:
-        await asyncio.sleep(60)  # Wait for 1 minute before checking again
+        await asyncio.sleep(100)  # Wait for 1 minute before checking again
 
         # Fetch all polls from the database
         conn = sqlite3.connect("vote_bot.db")
@@ -1709,6 +1709,7 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
 
     try:
         # Try to update the message in the channel with the new inline button
+        await asyncio.sleep(10)
         await context.bot.edit_message_reply_markup(
             chat_id=f"@{channel_username}",  # Correct channel username
             message_id=int(message_channel_id),  # Convert message_channel_id to integer
@@ -1738,7 +1739,7 @@ if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Start the periodic task of updating inline buttons every minute within the event loop
-    application.job_queue.run_repeating(update_inline_button_periodically, interval=60, first=0)
+    application.job_queue.run_repeating(update_inline_button_periodically, interval=600, first=0)
 
     # Add all your command handlers
     application.add_handler(CommandHandler("vote", vote_command))
