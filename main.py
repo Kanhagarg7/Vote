@@ -199,7 +199,7 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
   # Skip this poll if it's not a valid integer
     else:
         print(f"Error: Poll {poll_id} has a None message_channel_id")
-        continue  # Skip if message_channel_id is missing
+    continue  # Skip if message_channel_id is missing
     
         new_button = InlineKeyboardMarkup(
             [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
