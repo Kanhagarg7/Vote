@@ -167,65 +167,6 @@ from telegram.error import TelegramError
 
 import re
 
-async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Ensure the user is authorized to refresh the polls(e.g., only admins)
-    if not is_authorized(update):
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
-
-    # Fetch all pollsfrom the database
-    conn = sqlite3.connect("vote_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
-    """)
-    polls = cursor.fetchall()
-
-    if not polls:
-        await update.message.reply_text("❌ No polls found to refresh.")
-        return
-
-    # Loop through all pollsand update the inline buttons for each message
-    for poll in polls:
-        poll_id, channel_username, message_channel_id, votes, message_id = poll
-        
-        # Extract the message ID from the URL (if it's a URL)
-        # Ensure message_channel_id is valid
-    if message_channel_id:
-        try:
-            message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))  # Extract only numbers
-        except (AttributeError, ValueError, TypeError):
-            print(f"Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
-  # Skip this poll if it's not a valid integer
-    else:
-        print(f"Error: Poll {poll_id} has a None message_channel_id")
-    continue  # Skip if message_channel_id is missing
-    
-        new_button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
-        )
-
-        try:
-            # Try to update the message in the channel with the new inline button
-            await context.bot.edit_message_reply_markup(
-                chat_id=f"@{channel_username}",  # Correct channel username
-                message_id=int(message_channel_id),  # Convert message_channel_id to integer
-                reply_markup=new_button
-            )
-        except TelegramError as e:
-            # If the message is not found or any other Telegram-related issue, log and inform the user
-            if "Message to edit not found" in str(e):
-                print(f"Message with ID {message_channel_id} not found.")
-                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: Message not found.")
-                
-                # Optionally re-send the poll
-                await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
-            else:
-                print(f"Error updating poll {poll_id}: {e}")
-                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: {e}")
-
-    await update.message.reply_text("✅ All  vote and polls have been refreshed!")
-
 
 def decrement_vote(poll_id):
     conn = sqlite3.connect("vote_bot.db")
@@ -260,6 +201,65 @@ def reset_poll_votes(poll_id):
     """, (poll_id,))
     conn.commit()
     conn.close()
+async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Ensure the user is authorized to refresh the polls (e.g., only admins)
+    if not is_authorized(update):
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    # Fetch all polls from the database
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
+    """)
+    polls = cursor.fetchall()
+    conn.close()
+
+    if not polls:
+        await update.message.reply_text("❌ No polls found to refresh.")
+        return
+
+    # Loop through all polls and update the inline buttons for each message
+    for poll in polls:
+        poll_id, channel_username, message_channel_id, votes, message_id = poll
+
+        # Ensure message_channel_id is valid
+        if message_channel_id:
+            try:
+                message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))  # Extract only numbers
+            except (AttributeError, ValueError, TypeError):
+                print(f"Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
+                continue  # Skip this poll if it's not a valid integer
+        else:
+            print(f"Error: Poll {poll_id} has a None message_channel_id")
+            continue  # Skip if message_channel_id is missing
+
+        new_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+        )
+
+        try:
+            # Try to update the message in the channel with the new inline button
+            await context.bot.edit_message_reply_markup(
+                chat_id=f"@{channel_username}",  # Correct channel username
+                message_id=message_channel_id,  # Already an integer
+                reply_markup=new_button
+            )
+        except TelegramError as e:
+            # If the message is not found or any other Telegram-related issue, log and inform the user
+            if "Message to edit not found" in str(e):
+                print(f"Message with ID {message_channel_id} not found.")
+                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: Message not found.")
+                
+                # Optionally re-send the poll
+                await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
+            else:
+                print(f"Error updating poll {poll_id}: {e}")
+                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: {e}")
+
+    await update.message.reply_text("✅ All votes and polls have been refreshed!")
+    
 def has_voted(poll_id, user_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
