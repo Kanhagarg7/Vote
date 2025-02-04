@@ -239,24 +239,27 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
         )
 
-        try:
-            # Try to update the message in the channel with the new inline button
-            await context.bot.edit_message_reply_markup(
-                chat_id=f"@{channel_username}",  # Correct channel username
-                message_id=message_channel_id,  # Already an integer
-                reply_markup=new_button
-            )
-        except TelegramError as e:
-            # If the message is not found or any other Telegram-related issue, log and inform the user
-            if "Message to edit not found" in str(e):
-                print(f"Message with ID {message_channel_id} not found.")
-                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: Message not found.")
-                
-                # Optionally re-send the poll
-                await resend_poll(context, poll_id, channel_username, votes)  # Implement resend_poll to re-send the poll message
-            else:
-                print(f"Error updating poll {poll_id}: {e}")
-                await update.message.reply_text(f"❌ Failed to update poll {poll_id}: {e}")
+        import asyncio  # Required for async delay
+
+        for poll in polls:
+            try:
+                await asyncio.sleep(1)  # Add a delay to avoid Telegram rate limits
+                await context.bot.edit_message_reply_markup(
+                    chat_id=f"@{channel_username}",
+                    message_id=message_channel_id,
+                    reply_markup=new_button
+                )
+            except TelegramError as e:
+                if "Message to edit not found" in str(e):
+                    print(f"Message {message_channel_id} not found. Resending poll...")
+                    await resend_poll(context, poll_id, channel_username, votes)
+                elif "Timed out" in str(e):
+                    print(f"Poll {poll_id} update timed out. Retrying in 5 seconds...")
+                    await asyncio.sleep(5)  # Wait and retry
+                    continue  # Try again
+                else:
+                    print(f"Unknown error updating poll {poll_id}: {e}")
+            
 
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
     
