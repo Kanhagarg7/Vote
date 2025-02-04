@@ -247,39 +247,34 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
         )
 
-        max_retries = 3
-        retry_count = 0
+        try:
+            # Try to fetch the message
+            current_message = await context.bot.get_message(f"@{channel_username}", message_channel_id)
 
-        while retry_count < max_retries:
-            try:
-                # ✅ Fetch the actual message to check reply_markup (fix for the error)
-                current_message = await context.bot.get_message(f"@{channel_username}", message_channel_id)
-                
-                if current_message and current_message.reply_markup == new_button:
-                    print(f"⏭️ Poll {poll_id} skipped: No changes in inline buttons.")
-                    break  # No need to update
+            # If the message is not found, skip this poll
+            if not current_message:
+                print(f"❌ Poll {poll_id}: Message not found. Skipping poll...")
+                continue  # Skip if the message does not exist
 
-                await asyncio.sleep(1)  # Avoid Telegram rate limits
-                await context.bot.edit_message_reply_markup(
-                    chat_id=f"@{channel_username}",
-                    message_id=message_channel_id,
-                    reply_markup=new_button
-                )
-                break  # Success, exit loop
-            except TelegramError as e:
-                if "Message to edit not found" in str(e):
-                    print(f"🔄 Message {message_channel_id} not found. Resending poll...")
-                    await resend_poll(context, poll_id, channel_username, votes)
-                    break  # No need to retry further
-                elif "Timed out" in str(e):
-                    retry_count += 1
-                    print(f"⏳ Poll {poll_id} update timed out. Retrying in 5 seconds ({retry_count}/{max_retries})...")
-                    await asyncio.sleep(5)
-                else:
-                    print(f"❌ Unknown error updating poll {poll_id}: {e}")
-                    break  # Stop retrying for other errors
+            # Update the inline buttons
+            await asyncio.sleep(1)  # Avoid Telegram rate limits
+            await context.bot.edit_message_reply_markup(
+                chat_id=f"@{channel_username}",
+                message_id=message_channel_id,
+                reply_markup=new_button
+            )
+        except TelegramError as e:
+            if "Message to edit not found" in str(e):
+                print(f"❌ Poll {poll_id}: Message not found. Skipping poll...")
+                continue  # Skip if the message cannot be found
+            elif "Timed out" in str(e):
+                print(f"⏳ Poll {poll_id} update timed out. Retrying...")
+                await asyncio.sleep(5)
+            else:
+                print(f"❌ Unknown error updating poll {poll_id}: {e}")
 
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
+    
     
 def has_voted(poll_id, user_id):
     conn = sqlite3.connect("vote_bot.db")
