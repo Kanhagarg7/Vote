@@ -1581,9 +1581,6 @@ async def addvote(update: Update, context: CallbackContext):
         await update.message.reply_text("Invalid input. Please use the correct format: /addvote <poll_id> <no_of_votes>.")
     except Exception as e:
         await update.message.reply_text(f"An error occurred: {e}")
-import re
-import sqlite3
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, TelegramError
 
 async def update_inline_button_periodically(context):
     """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
