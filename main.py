@@ -223,10 +223,12 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     polls = cursor.fetchall()
     conn.close()
 
+    # Skip if no polls found
     if not polls:
-        await update.message.reply_text("❌ No polls found to refresh.")
-        return
+        await update.message.reply_text("❌ No polls found to refresh. Skipping...")
+        return  # Skip the entire refresh process
 
+    # Loop through all polls and update the inline buttons for each message
     for poll in polls:
         poll_id, channel_username, message_channel_id, votes, message_id = poll
 
@@ -250,8 +252,9 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         while retry_count < max_retries:
             try:
-                # Check if the current reply markup is the same before updating
-                current_message = await context.bot.get_chat(f"@{channel_username}")
+                # ✅ Fetch the actual message to check reply_markup (fix for the error)
+                current_message = await context.bot.get_chat_message(f"@{channel_username}", message_channel_id)
+                
                 if current_message and current_message.reply_markup == new_button:
                     print(f"⏭️ Poll {poll_id} skipped: No changes in inline buttons.")
                     break  # No need to update
