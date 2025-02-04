@@ -201,6 +201,13 @@ def reset_poll_votes(poll_id):
     """, (poll_id,))
     conn.commit()
     conn.close()
+import asyncio
+import re
+import sqlite3
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.error import TelegramError
+from telegram.ext import ContextTypes
+
 async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Ensure the user is authorized to refresh the polls (e.g., only admins)
     if not is_authorized(update):
@@ -220,46 +227,54 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No polls found to refresh.")
         return
 
-    # Loop through all polls and update the inline buttons for each message
     for poll in polls:
         poll_id, channel_username, message_channel_id, votes, message_id = poll
 
-        # Ensure message_channel_id is valid
+        # Extract valid message ID (ensure it's an integer)
         if message_channel_id:
             try:
-                message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))  # Extract only numbers
+                message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))
             except (AttributeError, ValueError, TypeError):
-                print(f"Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
-                continue  # Skip this poll if it's not a valid integer
+                print(f"❌ Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
+                continue  # Skip this poll if invalid
         else:
-            print(f"Error: Poll {poll_id} has a None message_channel_id")
+            print(f"❌ Poll {poll_id} has a None message_channel_id")
             continue  # Skip if message_channel_id is missing
 
         new_button = InlineKeyboardMarkup(
             [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
         )
 
-        import asyncio  # Required for async delay
+        max_retries = 3
+        retry_count = 0
 
-        for poll in polls:
+        while retry_count < max_retries:
             try:
-                await asyncio.sleep(1)  # Add a delay to avoid Telegram rate limits
+                # Check if the current reply markup is the same before updating
+                current_message = await context.bot.get_chat(f"@{channel_username}")
+                if current_message and current_message.reply_markup == new_button:
+                    print(f"⏭️ Poll {poll_id} skipped: No changes in inline buttons.")
+                    break  # No need to update
+
+                await asyncio.sleep(1)  # Avoid Telegram rate limits
                 await context.bot.edit_message_reply_markup(
                     chat_id=f"@{channel_username}",
                     message_id=message_channel_id,
                     reply_markup=new_button
                 )
+                break  # Success, exit loop
             except TelegramError as e:
                 if "Message to edit not found" in str(e):
-                    print(f"Message {message_channel_id} not found. Resending poll...")
+                    print(f"🔄 Message {message_channel_id} not found. Resending poll...")
                     await resend_poll(context, poll_id, channel_username, votes)
+                    break  # No need to retry further
                 elif "Timed out" in str(e):
-                    print(f"Poll {poll_id} update timed out. Retrying in 5 seconds...")
-                    await asyncio.sleep(5)  # Wait and retry
-                    continue  # Try again
+                    retry_count += 1
+                    print(f"⏳ Poll {poll_id} update timed out. Retrying in 5 seconds ({retry_count}/{max_retries})...")
+                    await asyncio.sleep(5)
                 else:
-                    print(f"Unknown error updating poll {poll_id}: {e}")
-            
+                    print(f"❌ Unknown error updating poll {poll_id}: {e}")
+                    break  # Stop retrying for other errors
 
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
     
