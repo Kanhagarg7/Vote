@@ -190,13 +190,17 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
         poll_id, channel_username, message_channel_id, votes, message_id = poll
         
         # Extract the message ID from the URL (if it's a URL)
-        match = re.search(r'(\d+)$', message_channel_id)  # Match the last part of the URL
-        if match:
-            message_channel_id = match.group(1)  # This gives the numeric message ID
-        
-        print(f"Updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
-
-        # Create the new inline button with updated vote count
+        # Ensure message_channel_id is valid
+    if message_channel_id:
+        try:
+            message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))  # Extract only numbers
+        except (AttributeError, ValueError, TypeError):
+            print(f"Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
+  # Skip this poll if it's not a valid integer
+    else:
+        print(f"Error: Poll {poll_id} has a None message_channel_id")
+        continue  # Skip if message_channel_id is missing
+    
         new_button = InlineKeyboardMarkup(
             [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
         )
