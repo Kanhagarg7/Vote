@@ -1477,18 +1477,23 @@ async def broadcast_message(context: ContextTypes.DEFAULT_TYPE, message_text: st
     # Return the results
     return total_users, success_count, fail_count
 
+from telegram import Update
+from telegram.ext import ContextTypes
+
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
 
-    # Check if a message was provided
-    if not context.args:
-        await update.message.reply_text("❌ Please provide a message to broadcast. Usage: /broadcast Your message here")
-        return
-
-    # Combine arguments to form the broadcast message
-    message_text = " ".join(context.args)
+    # Check if the message is a reply
+    if update.message.reply_to_message:
+        message_text = update.message.reply_to_message.text
+    else:
+        # Check if a message was provided as arguments
+        if not context.args:
+            await update.message.reply_text("❌ Please provide a message to broadcast. Usage: /broadcast Your message here or reply to a message with /broadcast")
+            return
+        message_text = " ".join(context.args)
 
     # Notify the admin about the start of the broadcast
     await update.message.reply_text("✅ Starting the broadcast...")
@@ -1503,7 +1508,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ Successful: {success_count}\n"
         f"❌ Failed: {fail_count}"
     )
-
+    
 def vote_poll(poll_id: int, user_id: int, votes: int, user_name: str, message_id: int):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
