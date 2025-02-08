@@ -1479,35 +1479,70 @@ async def broadcast_message(context: ContextTypes.DEFAULT_TYPE, message_text: st
 
 from telegram import Update
 from telegram.ext import ContextTypes
-
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
 
+    message_text = None
+    forward_message = None
+
     # Check if the message is a reply
     if update.message.reply_to_message:
-        message_text = update.message.reply_to_message.text
+        forward_message = update.message.reply_to_message
     else:
-        # Check if a message was provided as arguments
+        # Check if arguments were provided
         if not context.args:
-            await update.message.reply_text("❌ Please provide a message to broadcast. Usage: /broadcast Your message here or reply to a message with /broadcast")
+            await update.message.reply_text(
+                "❌ Please provide a valid Telegram message link.\n"
+                "Usage: `/broadcast https://t.me/channel_name/message_id` or reply to a message with `/broadcast`."
+            )
             return
+
+        # Get the message text from args
         message_text = " ".join(context.args)
 
-    # Notify the admin about the start of the broadcast
+        # Validate the link
+        if not (message_text.startswith("https://t.me/") or message_text.startswith("t.me/")):
+            await update.message.reply_text("❌ Invalid link! Only `https://t.me/` links are allowed.")
+            return
+
+        # Extract chat ID and message ID from the link
+        try:
+            link_parts = message_text.replace("https://", "").replace("t.me/", "").split("/")
+            if len(link_parts) != 2:
+                raise ValueError
+
+            chat_username, message_id = link_parts
+            message_id = int(message_id)
+
+            # Fetch the message from Telegram
+            forward_message = await context.bot.forward_message(
+                chat_id=update.effective_chat.id,
+                from_chat_id=chat_username,
+                message_id=message_id
+            )
+
+        except Exception:
+            await update.message.reply_text("❌ Failed to fetch the message. Make sure the link is correct and the bot has access.")
+            return
+
+    # Notify admin about the broadcast start
     await update.message.reply_text("✅ Starting the broadcast...")
 
     # Perform the broadcast
-    total_users, success_count, fail_count = await broadcast_message(context, message_text)
+    total_users, success_count, fail_count = await broadcast_message(
+        context, forward_message=forward_message
+    )
 
-    # Send a summary of the results
+    # Send summary of the results
     await update.message.reply_text(
         f"✅ Broadcast completed!\n\n"
         f"📊 Total Users: {total_users}\n"
         f"✅ Successful: {success_count}\n"
         f"❌ Failed: {fail_count}"
     )
+
     
 def vote_poll(poll_id: int, user_id: int, votes: int, user_name: str, message_id: int):
     conn = sqlite3.connect("vote_bot.db")
