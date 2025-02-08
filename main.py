@@ -1450,11 +1450,10 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Send the total user count
     await update.message.reply_text(f"📊 Total registered users: {total_users}")
-async def broadcast_message(context: ContextTypes.DEFAULT_TYPE, message_text: str):
+async def broadcast_message(context, forward_message=None, message_text=None):
+    # ✅ Connect to the database and fetch all user IDs
     conn = sqlite3.connect("bot_main.db")
     cursor = conn.cursor()
-
-    # Fetch all user IDs from the database
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
     conn.close()
@@ -1463,19 +1462,28 @@ async def broadcast_message(context: ContextTypes.DEFAULT_TYPE, message_text: st
     success_count = 0
     fail_count = 0
 
-    # Iterate through all users and send the message
+    # ✅ Iterate through all users and send the message
     for user in users:
         user_id = user[0]
         try:
-            await context.bot.send_message(chat_id=user_id, text=message_text)
+            if forward_message:
+                # ✅ Forward message only if it's from a Telegram link
+                await context.bot.forward_message(
+                    chat_id=user_id,
+                    from_chat_id=forward_message.chat.id,
+                    message_id=forward_message.message_id
+                )
+            elif message_text:
+                # ✅ Send message text (either from reply or normal text)
+                await context.bot.send_message(chat_id=user_id, text=message_text)
+
             success_count += 1
         except Exception as e:
-            # Handle errors (e.g., user blocked the bot or deleted their account)
             fail_count += 1
             print(f"Failed to send message to {user_id}: {e}")
 
-    # Return the results
     return total_users, success_count, fail_count
+    
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -1484,14 +1492,20 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
 
-    message_text = None
     forward_message = None
+    message_text = None
 
-    # Check if the message is a reply
+    # ✅ If command is used as a reply
     if update.message.reply_to_message:
-        forward_message = update.message.reply_to_message
+        if update.message.reply_to_message.text:
+            # ✅ Store the replied text
+            message_text = update.message.reply_to_message.text
+        else:
+            # ✅ If it's a media message, forward it normally
+            forward_message = update.message.reply_to_message
+
     else:
-        # Check if arguments were provided
+        # ✅ Ensure arguments are provided
         if not context.args:
             await update.message.reply_text(
                 "❌ Please provide a valid Telegram message link.\n"
@@ -1499,50 +1513,49 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Get the message text from args
+        # ✅ Get the message text from args
         message_text = " ".join(context.args)
 
-        # Validate the link
-        if not (message_text.startswith("https://t.me/") or message_text.startswith("t.me/")):
-            await update.message.reply_text("❌ Invalid link! Only `https://t.me/` links are allowed.")
-            return
+        # ✅ Validate the link format (only `https://t.me/` or `t.me/` allowed)
+        if message_text.startswith("https://t.me/") or message_text.startswith("t.me/"):
+            try:
+                link_parts = message_text.replace("https://", "").replace("t.me/", "").split("/")
+                if len(link_parts) != 2:
+                    raise ValueError
 
-        # Extract chat ID and message ID from the link
-        try:
-            link_parts = message_text.replace("https://", "").replace("t.me/", "").split("/")
-            if len(link_parts) != 2:
-                raise ValueError
+                chat_username, message_id = link_parts
+                message_id = int(message_id)
 
-            chat_username, message_id = link_parts
-            message_id = int(message_id)
+                # ✅ Fetch the message from Telegram
+                forward_message = await context.bot.forward_message(
+                    chat_id=update.effective_chat.id,  # Admin's chat to test fetching
+                    from_chat_id=chat_username,
+                    message_id=message_id
+                )
 
-            # Fetch the message from Telegram
-            forward_message = await context.bot.forward_message(
-                chat_id=update.effective_chat.id,
-                from_chat_id=chat_username,
-                message_id=message_id
-            )
+                # ✅ Reset message_text since we are forwarding
+                message_text = None
 
-        except Exception:
-            await update.message.reply_text("❌ Failed to fetch the message. Make sure the link is correct and the bot has access.")
-            return
+            except Exception:
+                await update.message.reply_text("❌ Failed to fetch the message. Make sure the link is correct and the bot has access.")
+                return
 
-    # Notify admin about the broadcast start
+    # ✅ Notify admin that the broadcast has started
     await update.message.reply_text("✅ Starting the broadcast...")
 
-    # Perform the broadcast
+    # ✅ Perform the broadcast
     total_users, success_count, fail_count = await broadcast_message(
-        context, forward_message=forward_message
+        context, forward_message=forward_message, message_text=message_text
     )
 
-    # Send summary of the results
+    # ✅ Send summary of the results
     await update.message.reply_text(
-        f"✅ Broadcast completed!\n\n"
-        f"📊 Total Users: {total_users}\n"
-        f"✅ Successful: {success_count}\n"
-        f"❌ Failed: {fail_count}"
+        f"✅ **Broadcast completed!**\n\n"
+        f"📊 **Total Users:** {total_users}\n"
+        f"✅ **Successful:** {success_count}\n"
+        f"❌ **Failed:** {fail_count}"
     )
-
+    
     
 def vote_poll(poll_id: int, user_id: int, votes: int, user_name: str, message_id: int):
     conn = sqlite3.connect("vote_bot.db")
