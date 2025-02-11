@@ -75,13 +75,13 @@ def backup_databases():
 # Auto backup function with initial 1-hour delay
 def auto_backup():
     """Waits for 1 hour before starting, then backs up every 1 hour."""
-    print("🕒 Waiting 1 hour before first commit...")
+    print("🕒 Waiting 6 hour before first commit...")
     time.sleep(3600)  # Wait for 1 hour
 
     while True:
         print("🔄 Running backup...")
         backup_databases()
-        time.sleep(3600)  # Wait for 1 hour before the next commit
+        time.sleep(21600)  # Wait for 1 hour before the next commit
 
 # Telegram command to manually trigger backup
 async def backup_command(update: Update, context: CallbackContext):
