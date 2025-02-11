@@ -76,7 +76,7 @@ def backup_databases():
 def auto_backup():
     """Waits for 1 hour before starting, then backs up every 1 hour."""
     print("🕒 Waiting 6 hour before first commit...")
-    time.sleep(3600)  # Wait for 1 hour
+    time.sleep(21600)  # Wait for 1 hour
 
     while True:
         print("🔄 Running backup...")
