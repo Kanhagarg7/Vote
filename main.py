@@ -508,7 +508,6 @@ async def start_command(update, context):
             f"‣ *Username* : @{escape_markdown(user.username or 'None', version=1)}\n"
             f"‣ *Link* : [{escape_markdown(user.first_name, version=1)}](tg://user?id={user.id})\n"
             f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=1)}\n"
-            f"‣ *Message ID* : `{message_id}`\n"
             f"‣ *Note* : Only channel subscribers can vote.\n\n"
             f"×× Created by - [@Trusted_Seller_of_Pd](https://t.me/Trusted_Seller_of_Pd)"
         )
@@ -521,7 +520,6 @@ async def start_command(update, context):
                 photo=open(img_path, "rb"),
                 reply_markup=button,
                 parse_mode="Markdown",
-                disable_web_page_preview=True
             )
 
         else:
@@ -1788,7 +1786,7 @@ async def update_vote_count_and_inline_button(poll_id, message_id, user_id, firs
     # Notify the creator
     if creator_id:
         try:
-            message_text = f"User [{first_name}](tg://user?id={user_id}) has left your poll.\n\nDo /current to check the latest status."
+            message_text = f"[{first_name}](tg://user?id={user_id}) has left and your votes has been decreasd!!\n\nDo /current to check the latest status."
             await context.bot.send_message(chat_id=creator_id, text=message_text, parse_mode="Markdown")
 
             # Mark the user as notified
