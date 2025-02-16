@@ -20,7 +20,7 @@ from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, C
 import sqlite3
 from datetime import datetime
 img_path = "img/img.png"
-BOT_TOKEN = "7593876189:AAFslnQGowB9Ehipx83q-euIqgAwcK1fdmo"
+BOT_TOKEN = "7948701239:AAHceJ4o62b327roKIPoIwK4tFd58_aSfVA"
 redis_uri = "redis://redis-18180.c85.us-east-1-2.ec2.redns.redis-cloud.com:18180"
 redis_password = "A75rYUacyUeWBOqAHk0JaeAX4kBmABFv"
 owners = [5873900195]
@@ -588,91 +588,104 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     user_name = query.from_user.first_name
+
     try:
         # Extract poll_id and message_id from the callback data
         poll_id, message_id = map(int, query.data.split(":")[1:])
     except ValueError:
-        await query.answer("❌  Invalid data received.", show_alert=True)
+        await query.answer("❌ Invalid data received.", show_alert=True)
         return
-    # Fetch user data from the database
+
+    # Connect to the database
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT vote_count, ban_until, message_id FROM voters WHERE user_id = ?
-    """, (user_id,))
-    user_data = cursor.fetchone()    # Fetch the user data from the database
-    if user_data:
-        vote_count, ban_until, user_message_id = user_data
-    else:
-        vote_count, ban_until, user_message_id = 0, None, None
+
+    # Fetch poll information (including channel username)
+    cursor.execute("SELECT channel_username, votes FROM polls WHERE poll_id = ?", (poll_id,))
+    poll_info = cursor.fetchone()
+
+    if not poll_info:
+        await query.answer("❌ Poll not found.", show_alert=True)
+        conn.close()
+        return
+
+    channel_username, current_votes = poll_info  # Get channel dynamically from DB
+
+    # Fetch user data from the database
+    cursor.execute("SELECT vote_count, ban_until, message_id FROM voters WHERE user_id = ?", (user_id,))
+    user_data = cursor.fetchone()
     conn.close()
-    # Get the current time to check ban status
+
+    vote_count, ban_until, user_message_id = user_data if user_data else (0, None, None)
     current_time = datetime.now()
+
     # Check if the user is banned
-    ban_until = get_user_ban_status(user_id)
     if ban_until and current_time < ban_until:
-        await query.answer(f"⛔  You are banned from voting until {ban_until}.", show_alert=True)
+        await query.answer(f"⛔ You are banned from voting until {ban_until}.", show_alert=True)
         return
 
     # Check if the user has already voted for another message
     if user_message_id and user_message_id != message_id:
         await query.answer(f"Hey {user_name}, You already voted. You can't vote for others now.", show_alert=True)
         return
+
     # Check if the user has already voted for the current poll (message_id)
     if user_message_id == message_id:
-        # User has already voted for the same message
         await query.answer(f"Hey {user_name}, You have already voted. You can't vote again.", show_alert=True)
         return
+
+    # Check if user is a member of the required channel
     try:
-        chat_member = await context.bot.get_chat_member("@Trusted_Seller_of_Pd", user_id)
+        chat_member = await context.bot.get_chat_member(f'@{channel_username}', user_id)
         if chat_member.status not in ["member", "administrator", "creator"]:
-            raise BadRequest("❌  You must join @Trusted_Seller_of_Pd to vote.")
+            raise BadRequest(f"❌ You must join {channel_username} to vote.")
     except BadRequest as e:
         await query.answer(str(e), show_alert=True)
         return
-    # Fetch poll info (not yet implemented, assuming function exists)
-    poll_info = get_poll_by_id(poll_id)
-    if not poll_info:
-        await query.answer("❌  Poll not found.", show_alert=True)
-        return
+
     # Increment the vote count for the poll
     increment_vote(poll_id)
+
     # Record the user's vote in the database
     record_vote(poll_id, user_id, message_id)
-    # recording who voted whom
+
+    # Recording who voted whom
     list(poll_id, user_id, user_name, message_id)
+
     # Fetch updated vote count
     poll_info = get_poll_by_id(poll_id)
     new_votes = poll_info[1]
-    # Fetch poll info
-# message_channel_id
 
     # Update the inline button with the new vote count
     new_button = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(f"Vote ⚡  ({new_votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
+        [[InlineKeyboardButton(f"Vote ⚡ ({new_votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
     )
     await query.message.edit_reply_markup(reply_markup=new_button)
+
     # Check if the user has exceeded the repeated click limit
     if vote_count >= 5:
-    # Ban the user for 2 hours
+        # Ban the user for 2 hours
         ban_until = current_time + timedelta(hours=2)
         set_user_ban(poll_id, user_id, ban_until)
         await query.answer(
-            "❌  You have clicked too many times. You are now banned for 2 hours.",
+            "❌ You have clicked too many times. You are now banned for 2 hours.",
             show_alert=True,
         )
         return
 
     # Increment the user's vote count
     increment_user_vote_count(poll_id, user_id)
+
     # Notify the user that the vote has been counted
-    await query.answer("✅  Your vote has been counted!")
+    await query.answer("✅ Your vote has been counted!")
+
     # Notify the user about attempts left before ban (if needed)
     if vote_count + 1 < 5:
         await query.answer(
-            f"❌  You have already clicked. Attempts left before ban: {5 - (vote_count + 1)}.",
+            f"❌ You have already clicked. Attempts left before ban: {5 - (vote_count + 1)}.",
             show_alert=True,
         )
+
 # Handle when a user leaves the channel
 # Command to stop and display top users
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -910,7 +923,7 @@ def escape_url(user_id: int) -> str:
     return f"{user_id}"
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
+    if not is_authorized(update) and not is_allowed(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
     if is_user_banned(update.effective_user.id):
@@ -999,7 +1012,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackContext
 
 async def delete_poll(update: Update, context: CallbackContext):
-    if not is_authorized(update):
+    if not is_authorized(update) and not is_allowed(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
     
@@ -1164,6 +1177,12 @@ def create_db():
     cursor = conn.cursor()
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS allowed_users (
+        user_id INTEGER PRIMARY KEY,
+        is_allowed INTEGER DEFAULT 0
+    )""")
+    
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         username TEXT,
@@ -1171,6 +1190,9 @@ def create_db():
         last_name TEXT,
         is_banned INTEGER DEFAULT 0
     )""")
+
+
+    # Table for sudo (admin) 
     
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sudo_users (
@@ -1190,6 +1212,46 @@ def create_db():
 
     conn.commit()
     conn.close()
+async def removeuser(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Revokes access by removing users from the allowed_users table."""
+    if not is_authorized(update):
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+        
+
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /removeuser <user_id> or <username>")
+        return
+
+    user_input = context.args[0]
+
+    try:
+        # Convert username to user ID if needed
+        if user_input.isdigit():
+            user_id = int(user_input)
+        else:
+            user = await context.bot.get_chat(user_input)
+            user_id = user.id
+
+        # Remove user from the database
+        conn = sqlite3.connect("bot_main.db")
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        cursor.execute("SELECT user_id FROM allowed_users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+
+        if not result:
+            await update.message.reply_text(f"❌ User {user_input} is not in the allowed list.")
+        else:
+            cursor.execute("DELETE FROM allowed_users WHERE user_id = ?", (user_id,))
+            conn.commit()
+            await update.message.reply_text(f"✅ User {user_input} has been removed from allowed users.")
+
+        conn.close()
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
 
 # Add User Function
 def add_user(user_id, username, first_name, last_name):
@@ -1338,6 +1400,19 @@ async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Return the user data from the database
         return target_user
+def is_allowed(update: Update) -> bool:
+    """Checks if the user is in the allowed_users list with is_allowed = 1."""
+    user = update.effective_user
+    if not user:
+        return False
+
+    conn = sqlite3.connect("bot_main.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT is_allowed FROM allowed_users WHERE user_id = ?", (user.id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    return result is not None and result[0] == 1  # Ensure is_allowed is 1
 
 
 def is_authorized(update: Update) -> bool:
@@ -1450,10 +1525,11 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Send the total user count
     await update.message.reply_text(f"📊 Total registered users: {total_users}")
-async def broadcast_message(context, forward_message=None, message_text=None):
-    # ✅ Connect to the database and fetch all user IDs
+async def broadcast_message(context: ContextTypes.DEFAULT_TYPE, message_text: str):
     conn = sqlite3.connect("bot_main.db")
     cursor = conn.cursor()
+
+    # Fetch all user IDs from the database
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
     conn.close()
@@ -1462,100 +1538,51 @@ async def broadcast_message(context, forward_message=None, message_text=None):
     success_count = 0
     fail_count = 0
 
-    # ✅ Iterate through all users and send the message
+    # Iterate through all users and send the message
     for user in users:
         user_id = user[0]
         try:
-            if forward_message:
-                # ✅ Forward message only if it's from a Telegram link
-                await context.bot.forward_message(
-                    chat_id=user_id,
-                    from_chat_id=forward_message.chat.id,
-                    message_id=forward_message.message_id
-                )
-            elif message_text:
-                # ✅ Send message text (either from reply or normal text)
-                await context.bot.send_message(chat_id=user_id, text=message_text)
-
+            await context.bot.send_message(chat_id=user_id, text=message_text)
             success_count += 1
         except Exception as e:
+            # Handle errors (e.g., user blocked the bot or deleted their account)
             fail_count += 1
             print(f"Failed to send message to {user_id}: {e}")
 
+    # Return the results
     return total_users, success_count, fail_count
-    
 
 from telegram import Update
 from telegram.ext import ContextTypes
+
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
 
-    forward_message = None
-    message_text = None
-
-    # ✅ If command is used as a reply
+    # Check if the message is a reply
     if update.message.reply_to_message:
-        if update.message.reply_to_message.text:
-            # ✅ Store the replied text
-            message_text = update.message.reply_to_message.text
-        else:
-            # ✅ If it's a media message, forward it normally
-            forward_message = update.message.reply_to_message
-
+        message_text = update.message.reply_to_message.text
     else:
-        # ✅ Ensure arguments are provided
+        # Check if a message was provided as arguments
         if not context.args:
-            await update.message.reply_text(
-                "❌ Please provide a valid Telegram message link.\n"
-                "Usage: `/broadcast https://t.me/channel_name/message_id` or reply to a message with `/broadcast`."
-            )
+            await update.message.reply_text("❌ Please provide a message to broadcast. Usage: /broadcast Your message here or reply to a message with /broadcast")
             return
-
-        # ✅ Get the message text from args
         message_text = " ".join(context.args)
 
-        # ✅ Validate the link format (only `https://t.me/` or `t.me/` allowed)
-        if message_text.startswith("https://t.me/") or message_text.startswith("t.me/"):
-            try:
-                link_parts = message_text.replace("https://", "").replace("t.me/", "").split("/")
-                if len(link_parts) != 2:
-                    raise ValueError
-
-                chat_username, message_id = link_parts
-                message_id = int(message_id)
-
-                # ✅ Fetch the message from Telegram
-                forward_message = await context.bot.forward_message(
-                    chat_id=update.effective_chat.id,  # Admin's chat to test fetching
-                    from_chat_id=chat_username,
-                    message_id=message_id
-                )
-
-                # ✅ Reset message_text since we are forwarding
-                message_text = None
-
-            except Exception:
-                await update.message.reply_text("❌ Failed to fetch the message. Make sure the link is correct and the bot has access.")
-                return
-
-    # ✅ Notify admin that the broadcast has started
+    # Notify the admin about the start of the broadcast
     await update.message.reply_text("✅ Starting the broadcast...")
 
-    # ✅ Perform the broadcast
-    total_users, success_count, fail_count = await broadcast_message(
-        context, forward_message=forward_message, message_text=message_text
-    )
+    # Perform the broadcast
+    total_users, success_count, fail_count = await broadcast_message(context, message_text)
 
-    # ✅ Send summary of the results
+    # Send a summary of the results
     await update.message.reply_text(
-        f"✅ **Broadcast completed!**\n\n"
-        f"📊 **Total Users:** {total_users}\n"
-        f"✅ **Successful:** {success_count}\n"
-        f"❌ **Failed:** {fail_count}"
+        f"✅ Broadcast completed!\n\n"
+        f"📊 Total Users: {total_users}\n"
+        f"✅ Successful: {success_count}\n"
+        f"❌ Failed: {fail_count}"
     )
-    
     
 def vote_poll(poll_id: int, user_id: int, votes: int, user_name: str, message_id: int):
     conn = sqlite3.connect("vote_bot.db")
@@ -1781,15 +1808,62 @@ async def update_vote_count_and_inline_button(poll_id, message_id, context):
             print(f"❌ Failed to update poll {poll_id}: {e}")
     
     conn.close()
+import sqlite3
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes
+
+# List of allowed commands for added users
+
+async def adduser(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allows ActiveForever to add a user with restricted access."""
+    if not is_authorized(update):
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /adduser <user_id> or <username>")
+        return
+
+    user_input = context.args[0]
+
+    try:
+        # Convert username to user ID if needed
+        if user_input.isdigit():
+            user_id = int(user_input)
+        else:
+            user = await context.bot.get_chat(user_input)
+            user_id = user.id
+
+
+        # Add user to the database
+        conn = sqlite3.connect("bot_main.db")
+        cursor = conn.cursor()
+
+        # Check if user already exists
+        cursor.execute("SELECT user_id FROM allowed_users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+
+        if result:
+            await update.message.reply_text(f"✅ This user ({user_id}) is already allowed.")
+        else:
+            # Insert new user into the allowed_users table
+            cursor.execute("INSERT INTO allowed_users (user_id, is_allowed) VALUES (?, 1)", (user_id,))
+            conn.commit()
+            await update.message.reply_text(f"✅ User {user_input} added!")
+
+        conn.close()
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
 # Your main function to start the bot
 if __name__ == "__main__":
     init_db()
     create_db()
     create_users_table()
     import subprocess
-    subprocess.Popen(["python3", "auto.py"])
     # Create the application with the provided BOT_TOKEN
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).get_updates_connect_timeout(30).build()
 
     # Start the periodic task of updating inline buttons every minute within the event loop
     application.job_queue.run_repeating(update_inline_button_periodically, interval=600, first=0)
@@ -1817,9 +1891,13 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("refresh", refresh))
     application.add_handler(CommandHandler("addvotes", addvote))
-
+    application.add_handler(CommandHandler("adduser", adduser))
+    application.add_handler(CommandHandler("removeuser", removeuser))
     # Add callback handler for inline button presses
     application.add_handler(CallbackQueryHandler(handle_join_button, pattern="^joined_"))
+    
+
+
 
     # Start polling to handle updates
     application.run_polling()
