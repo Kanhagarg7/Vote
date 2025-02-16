@@ -213,60 +213,7 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
-
-    # Fetch all polls from the database
-    conn = sqlite3.connect("vote_bot.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
-    """)
-    polls = cursor.fetchall()
-    conn.close()
-
-    # Skip if no polls found
-    if not polls:
-        await update.message.reply_text("❌ No polls found to refresh. Skipping...")
-        return  # Skip the entire refresh process
-
-    # Loop through all polls and update the inline buttons for each message
-    for poll in polls:
-        poll_id, channel_username, message_channel_id, votes, message_id = poll
-
-        # Extract valid message ID (ensure it's an integer)
-        if message_channel_id:
-            try:
-                message_channel_id = int(re.search(r'(\d+)$', str(message_channel_id)).group(1))
-            except (AttributeError, ValueError, TypeError):
-                print(f"❌ Error: Invalid message_channel_id for poll {poll_id}: {message_channel_id}")
-                continue  # Skip this poll if invalid
-        else:
-            print(f"❌ Poll {poll_id} has a None message_channel_id")
-            continue  # Skip if message_channel_id is missing
-
-        new_button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(f"Vote ⚡  ({votes})", callback_data=f"vote:{poll_id}:{message_id}")]]
-        )
-
-        try:
-            
-
-            # Update the inline buttons
-            await asyncio.sleep(1)  # Avoid Telegram rate limits
-            await context.bot.edit_message_reply_markup(
-                chat_id=f"@{channel_username}",
-                message_id=message_channel_id,
-                reply_markup=new_button
-            )
-        except TelegramError as e:
-            if "Message to edit not found" in str(e):
-                print(f"❌ Poll {poll_id}: Message not found. Skipping poll...")
-                continue  # Skip if the message cannot be found
-            elif "Timed out" in str(e):
-                print(f"⏳ Poll {poll_id} update timed out. Retrying...")
-                await asyncio.sleep(5)
-            else:
-                print(f"❌ Unknown error updating poll {poll_id}: {e}")
-
+    await update_inline_button_periodically(context)
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
     
     
@@ -1717,8 +1664,7 @@ async def update_inline_button_periodically(context):
                     print(f"Error checking membership for user {user_id}: {e}")
 
             # After checking membership, update the vote count and the inline button
-            await update_vote_count_and_inline_button(poll_id, message_id, context)
-
+            await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
         conn.close()
 
 def decrease_vote_count(poll_id, user_id):
