@@ -1657,6 +1657,10 @@ async def update_inline_button_periodically(context):
                     # Check if the user is still a member of the channel
                     chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
                     if chat_member.status not in ["member", "administrator", "creator"]:
+                        user_data = await context.bot.get_chat(user_id)
+                        first_name = user_data.first_name if user_data else " "
+
+            # Update vote count 
                         # If user left the channel, decrease their vote count
                         print(f"User {user_id} has left the channel. Decreasing their vote.")
                         decrease_vote_count(poll_id, user_id)
@@ -1666,6 +1670,7 @@ async def update_inline_button_periodically(context):
             # After checking membership, update the vote count and the inline button
             await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
         conn.close()
+        
 
 def decrease_vote_count(poll_id, user_id):
     """ Remove only one vote from the poll for the specific user when they leave the channel. """
