@@ -213,7 +213,7 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
-    await update_inline_button_periodically(context)
+    asyncio.create_task(update_inline_button_periodically(context))
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
     
     
