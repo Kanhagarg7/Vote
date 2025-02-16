@@ -31,7 +31,13 @@ API_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e"
 def init_db():
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
-    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notified_users(
+            poll_id INTEGER,
+            user_id INTEGER,
+            PRIMARY KEY (poll_id, user_id)
+        )
+    """)
     # Create the pollstable with message_channel_id
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS polls(
@@ -213,7 +219,10 @@ async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update):
         await update.message.reply_text("❌ You are not authorized to use this command.")
         return
-    asyncio.create_task(update_inline_button_periodically(context))
+    print("")
+    await update_inline_button_periodically(context)
+    
+
     await update.message.reply_text("✅ All votes and polls have been refreshed!")
     
     
@@ -512,6 +521,7 @@ async def start_command(update, context):
                 photo=open(img_path, "rb"),
                 reply_markup=button,
                 parse_mode="Markdown",
+                disable_web_page_preview=True
             )
 
         else:
@@ -520,6 +530,7 @@ async def start_command(update, context):
                 text=response,
                 reply_markup=button,
                 parse_mode="Markdown",
+                disable_web_page_preview=True
             )
 
         if sent_message:
@@ -528,7 +539,6 @@ async def start_command(update, context):
 
         mark_poll_created(user.id)
         await update.message.reply_text("✅ You have successfully participated in the voting!")
-
 # Handle vote functionality and track user voting attemptsr 
 
 async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -625,7 +635,7 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Notify the user that the vote has been counted
     await query.answer("✅ Your vote has been counted!")
-
+    delete_notified_user(poll_id, user_id)
     # Notify the user about attempts left before ban (if needed)
     if vote_count + 1 < 5:
         await query.answer(
@@ -634,7 +644,8 @@ async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # Handle when a user leaves the channel
-# Command to stop and display top users
+# Command to stop and display top 
+
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != "ActiveForever":
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -1658,19 +1669,28 @@ async def update_inline_button_periodically(context):
                     chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
                     if chat_member.status not in ["member", "administrator", "creator"]:
                         user_data = await context.bot.get_chat(user_id)
-                        first_name = user_data.first_name if user_data else " "
+                        first_name = user_data.first_name if user_data else "Unknown"
 
             # Update vote count 
                         # If user left the channel, decrease their vote count
                         print(f"User {user_id} has left the channel. Decreasing their vote.")
                         decrease_vote_count(poll_id, user_id)
+                        if first_name:
+                            await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
                 except Exception as e:
                     print(f"Error checking membership for user {user_id}: {e}")
 
             # After checking membership, update the vote count and the inline button
-            await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
+            
         conn.close()
-        
+def delete_notified_user(poll_id, user_id):
+    conn = sqlite3.connect("vote_bot.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM notified_users WHERE poll_id = ? AND user_id = ?
+    """, (poll_id, user_id))  # Correct indentation
+    conn.commit()
+    conn.close()
 
 def decrease_vote_count(poll_id, user_id):
     """ Remove only one vote from the poll for the specific user when they leave the channel. """
@@ -1713,7 +1733,7 @@ async def update_vote_count_and_inline_button(poll_id, message_id, user_id, firs
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT poll_id, channel_username, message_channel_id, votes, message_id, creator_id, creator_name FROM polls WHERE poll_id = ?
+        SELECT poll_id, channel_username, message_channel_id, votes, message_id, creator_id FROM polls WHERE poll_id = ?
     """, (poll_id,))
     poll = cursor.fetchone()
 
@@ -1721,7 +1741,7 @@ async def update_vote_count_and_inline_button(poll_id, message_id, user_id, firs
         print(f"❌ Poll {poll_id} not found.")
         return
 
-    poll_id, channel_username, message_channel_id, votes, message_id, creator_id, creator_name = poll
+    poll_id, channel_username, message_channel_id, votes, message_id, creator_id = poll
 
     if message_channel_id:
         match = re.search(r'(\d+)', str(message_channel_id))
@@ -1757,13 +1777,27 @@ async def update_vote_count_and_inline_button(poll_id, message_id, user_id, firs
             print(f"❌ Failed to update poll {poll_id}: {e}")
     
     # Notify the creator that a user left and votes decreased
+    cursor.execute("SELECT 1 FROM notified_users WHERE poll_id = ? AND user_id = ?", (poll_id, user_id))
+    already_notified = cursor.fetchone()
+
+    if already_notified:
+        print(f"✅ User {user_id} ({first_name}) already notified. Skipping...")
+        conn.close()
+        return
+
+    # Notify the creator
     if creator_id:
         try:
-            message_text = f"User [{first_name}](tg://user?id={user_id}) has left and your votes have decreased.\n\nDo /current to check the latest votes."
+            message_text = f"User [{first_name}](tg://user?id={user_id}) has left your poll.\n\nDo /current to check the latest status."
             await context.bot.send_message(chat_id=creator_id, text=message_text, parse_mode="Markdown")
+
+            # Mark the user as notified
+            cursor.execute("INSERT INTO notified_users (poll_id, user_id) VALUES (?, ?)", (poll_id, user_id))
+            conn.commit()
+
         except TelegramError as e:
             print(f"❌ Failed to notify creator {creator_id}: {e}")
-    
+
     conn.close()
 
 import sqlite3
