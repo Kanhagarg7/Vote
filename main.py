@@ -1621,7 +1621,7 @@ async def addvote(update: Update, context: CallbackContext):
 async def update_inline_button_periodically(context):
     """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
     while True:
-        await asyncio.sleep(100)  # Wait for 1 minute before checking again
+        await asyncio.sleep(600)  # Wait for 1 minute before checking again
 
         # Fetch all polls from the database
         conn = sqlite3.connect("vote_bot.db")
@@ -1667,14 +1667,13 @@ async def update_inline_button_periodically(context):
                     chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
                     if chat_member.status not in ["member", "administrator", "creator"]:
                         user_data = await context.bot.get_chat(user_id)
-                        first_name = user_data.first_name if user_data else "Unknown"
+                        first_name = user_data.first_name if user_data else "     "
 
             # Update vote count 
                         # If user left the channel, decrease their vote count
                         print(f"User {user_id} has left the channel. Decreasing their vote.")
                         decrease_vote_count(poll_id, user_id)
-                        if first_name:
-                            await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
+                        await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
                 except Exception as e:
                     print(f"Error checking membership for user {user_id}: {e}")
 
