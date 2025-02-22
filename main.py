@@ -1618,12 +1618,15 @@ async def addvote(update: Update, context: CallbackContext):
     except Exception as e:
         await update.message.reply_text(f"An error occurred: {e}")
 
-async def update_inline_button_periodically(context):
-    """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
-   # Wait for 1 minute before checking again
+import sqlite3
+import re
+from telegram import ChatMember
 
-        # Fetch all polls from the database
-        conn = sqlite3.connect("vote_bot.db")
+async def update_inline_button_periodically(context):
+    """Periodically checks membership, updates vote counts, and inline buttons every 1 minute."""
+    
+    # Fetch all polls from the database
+    with sqlite3.connect("vote_bot.db") as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT poll_id, channel_username, message_channel_id, votes, message_id FROM polls
@@ -1632,7 +1635,7 @@ async def update_inline_button_periodically(context):
 
         if not polls:
             print("No polls found to refresh.")
-            continue  # No polls to refresh, continue checking in the next cycle
+            return  # Exit function if no polls exist
 
         # Loop through all polls and update the inline buttons for each message
         for poll in polls:
@@ -1640,10 +1643,9 @@ async def update_inline_button_periodically(context):
 
             # Ensure message_channel_id is an integer if it exists
             if message_channel_id:
-                # Regex to extract numbers from a URL (e.g., 'https://t.me/somechannel/12345')
                 match = re.search(r'(\d+)', str(message_channel_id))  # Match digits in message_channel_id
                 if match:
-                    message_channel_id = int(match.group(1))  # This extracts and converts the number
+                    message_channel_id = int(match.group(1))  # Extract and convert the number
                 else:
                     print(f"❌ Poll {poll_id}: No valid numeric value found in message_channel_id. Skipping poll...")
                     continue  # Skip if no valid numeric value found
@@ -1654,9 +1656,7 @@ async def update_inline_button_periodically(context):
             print(f"Checking membership and updating poll {poll_id} in channel {channel_username} with message_channel_id {message_channel_id} and votes {votes}")
 
             # Check membership of users who voted in this poll
-            cursor.execute("""
-                SELECT user_id FROM poll_votes WHERE poll_id = ?
-            """, (poll_id,))
+            cursor.execute("SELECT user_id FROM poll_votes WHERE poll_id = ?", (poll_id,))
             users = cursor.fetchall()
 
             for user in users:
@@ -1664,21 +1664,16 @@ async def update_inline_button_periodically(context):
                 try:
                     # Check if the user is still a member of the channel
                     chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
-                    if chat_member.status not in ["member", "administrator", "creator"]:
+                    if chat_member.status not in [ChatMember.MEMBER, ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
                         user_data = await context.bot.get_chat(user_id)
-                        first_name = user_data.first_name if user_data else "     "
+                        first_name = user_data.first_name if user_data else "Unknown"
 
-            # Update vote count 
                         # If user left the channel, decrease their vote count
                         print(f"User {user_id} has left the channel. Decreasing their vote.")
                         decrease_vote_count(poll_id, user_id)
                         await update_vote_count_and_inline_button(poll_id, message_id, user_id, first_name, context)
                 except Exception as e:
                     print(f"Error checking membership for user {user_id}: {e}")
-
-            # After checking membership, update the vote count and the inline button
-            
-        conn.close()
 def delete_notified_user(poll_id, user_id):
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
