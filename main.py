@@ -1620,8 +1620,7 @@ async def addvote(update: Update, context: CallbackContext):
 
 async def update_inline_button_periodically(context):
     """ Periodically checks membership, updates vote counts and inline buttons every 1 minute """
-    while True:
-        await asyncio.sleep(600)  # Wait for 1 minute before checking again
+   # Wait for 1 minute before checking again
 
         # Fetch all polls from the database
         conn = sqlite3.connect("vote_bot.db")
