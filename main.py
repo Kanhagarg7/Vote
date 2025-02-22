@@ -1664,7 +1664,7 @@ async def update_inline_button_periodically(context):
                 try:
                     # Check if the user is still a member of the channel
                     chat_member = await context.bot.get_chat_member(f"@{channel_username}", user_id)
-                    if chat_member.status not in [ChatMember.MEMBER, ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
+                    if chat_member.status not in ["member", "administrator", "creator"]:
                         user_data = await context.bot.get_chat(user_id)
                         first_name = user_data.first_name if user_data else "Unknown"
 
