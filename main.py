@@ -20,7 +20,7 @@ from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, C
 import sqlite3
 from datetime import datetime
 img_path = "img/img.png"
-BOT_TOKEN = "7593876189:AAFslnQGowB9Ehipx83q-euIqgAwcK1fdmo"
+BOT_TOKEN = "7593876189:AAExsIGMoAs8eokv45xQA3h5IyW2-ZHg2KA"
 redis_uri = "redis://redis-18180.c85.us-east-1-2.ec2.redns.redis-cloud.com:18180"
 redis_password = "A75rYUacyUeWBOqAHk0JaeAX4kBmABFv"
 owners = [5873900195]
