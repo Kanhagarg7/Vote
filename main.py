@@ -11,7 +11,6 @@ from telegram.ext import (
     filters,
 )
 from telegram.helpers import escape_markdown
-from telegram.helpers import escape_html
 
 from telegram.error import BadRequest, TelegramError
 # Import specific items from datetime instead of using wildcard import
