@@ -1402,51 +1402,72 @@ async def handle_channel_username(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logging.error(f"Error in handle_channel_username: {str(e)}")
         await update.message.reply_text("❌ Something went wrong while creating the poll. Please try again later.")
-
-async def start_command(update, context):
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    args = context.args
-
+    
     if not user:
         await update.message.reply_text("❌ Unable to process your request. User information is missing.")
         return
 
     if is_user_banned(user.id):
         await update.message.reply_text("❌ You are banned from using this command.")
-        return 
-        
-    is_member = await check_user_membership(user.id, context.bot, CHANNEL_USERNAME)
-    if not is_member:
-        join_link = f"https://t.me/Trusted_Sellers_of_Pd"
-        keyboard = [
-            [InlineKeyboardButton("Join Channel 🔗", url=join_link)],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            f"❌ You must join {CHANNEL_USERNAME} to use the bot.",
-            reply_markup=reply_markup
-        )
         return
-
+        
+    # Register user if not already registered
     if not is_user_registered(user.id):
         add_user_to_db(user.id, user.first_name, user.last_name or "", user.username or "")
         await update.message.reply_text(f"✅ You are now registered, {user.first_name}!")
 
-    if not args:
-        await update.message.reply_text(f"✅ Welcome back, {user.first_name}!\nUse a link to participate in the giveaway.")
+    # Handle both direct command (/start) and deep links (t.me/bot?start=channel)
+    payload = None
+    if update.message and update.message.text:
+        parts = update.message.text.split(' ', 1)
+        if len(parts) > 1:
+            payload = parts[1]
+    elif context.args:
+        payload = context.args[0]
+
+    if not payload:
+        # No channel specified - show welcome message
+        await update.message.reply_text(
+            f"✅ Welcome back, {user.first_name}!\n"
+            "Use a participation link to join a giveaway."
+        )
         return
 
-    channel_username = args[0]
+    # Check channel membership before proceeding with poll participation
+    is_member = await check_user_membership(user.id, context.bot, CHANNEL_USERNAME)
+    if not is_member:
+        join_link = f"https://t.me/{CHANNEL_USERNAME}"
+        keyboard = [[InlineKeyboardButton("Join Channel 🔗", url=join_link)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            f"❌ You must join @{CHANNEL_USERNAME} to participate.",
+            reply_markup=reply_markup
+        )
+        return
+
+    channel_username = payload.strip('@')  # Remove @ if present
     
     # Check if channel has active poll
     conn = sqlite3.connect("vote_bot.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT is_active FROM channel_polls WHERE channel_username = ?", (channel_username,))
+    cursor.execute("""
+        SELECT is_active, creator_id 
+        FROM channel_polls 
+        WHERE channel_username = ?
+    """, (channel_username,))
     result = cursor.fetchone()
     conn.close()
     
-    if not result or not result[0]:
-        await update.message.reply_text("❌ No active poll in this channel.")
+    if not result:
+        await update.message.reply_text("❌ No poll found in this channel.")
+        return
+        
+    is_active, creator_id = result
+    
+    if not is_active:
+        await update.message.reply_text("❌ This poll is not active.")
         return
 
     # Check if user can join this poll
@@ -1460,9 +1481,9 @@ async def start_command(update, context):
     add_user_channel_session(user.id, channel_username)
     
     vote_count = get_channel_vote_count(channel_username)
-    button = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(f"Vote ⚡ ({vote_count})", callback_data=f"vote:{channel_username}")]]
-    )
+    button = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"Vote ⚡ ({vote_count})", callback_data=f"vote:{channel_username}")]
+    ])
 
     response = (
         f"✅ Successfully participated.\n\n"
@@ -1472,27 +1493,31 @@ async def start_command(update, context):
         f"‣ *Link* : [{escape_markdown(user.first_name, version=2)}](tg://user?id={user.id})\n"
         f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=2)}\n"
         f"‣ *Note* : Only channel subscribers can vote.\n\n"
-        f"×× Created by - [@Trusted_Sellers_of_Pd](https://t.me/Trusted_Sellers_of_Pd)"
+        f"×× Created by - [@{CHANNEL_USERNAME}](https://t.me/{CHANNEL_USERNAME})"
     )
 
-    if os.path.exists(img_path):
-        sent_message = await context.bot.send_photo(
-            chat_id=f"@{channel_username}",
-            caption=response,
-            photo=open(img_path, "rb"),
-            reply_markup=button,
-            parse_mode="MarkdownV2",
-        )
-    else:
-        sent_message = await context.bot.send_message(
-            chat_id=f"@{channel_username}",
-            text=response,
-            reply_markup=button,
-            parse_mode="MarkdownV2",
-            disable_web_page_preview=True
-        )
-
-    await update.message.reply_text("✅ You have successfully participated in the voting!")
+    try:
+        if os.path.exists(img_path):
+            await context.bot.send_photo(
+                chat_id=f"@{channel_username}",
+                caption=response,
+                photo=open(img_path, "rb"),
+                reply_markup=button,
+                parse_mode="MarkdownV2",
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=f"@{channel_username}",
+                text=response,
+                reply_markup=button,
+                parse_mode="MarkdownV2",
+                disable_web_page_preview=True
+            )
+            
+        await update.message.reply_text("✅ You have successfully participated in the voting!")
+    except Exception as e:
+        logging.error(f"Error sending participation message: {str(e)}")
+        await update.message.reply_text("❌ Failed to complete participation. Please try again.")
 
 async def handle_vote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1552,7 +1577,114 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Polls stopped in: {channels_list}")
     else:
         await update.message.reply_text("❌ Failed to stop any polls.")
+async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle the /logs command to display or send bot logs.
+    - For logs under 2000 characters: sends as text
+    - For larger logs: sends as a document
+    - Includes filtering options for specific log levels
+    """
+    
+    if not is_special_user(update.effective_user.id):
+        await update.message.reply_text("❌ You are not authorized to view logs.")
+        return
 
+    # Parse command arguments
+    args = context.args
+    log_level = None
+    lines_limit = 100  # Default limit
+    search_term = None
+
+    # Parse optional arguments
+    if args:
+        for arg in args:
+            arg_lower = arg.lower()
+            if arg_lower in ['debug', 'info', 'warning', 'error', 'critical']:
+                log_level = arg_lower.upper()
+            elif arg.isdigit():
+                lines_limit = min(int(arg), 1000)  # Max 1000 lines for safety
+            else:
+                search_term = arg
+
+    # Determine log file path (adjust as needed)
+    log_file_path = "bot.log"  # Default log file
+    if len(args) > 0 and args[0].endswith('.log'):
+        log_file_path = args[0]
+
+    try:
+        # Read log file with error handling
+        if not os.path.exists(log_file_path):
+            await update.message.reply_text(f"❌ Log file not found: {log_file_path}")
+            return
+
+        with open(log_file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        # Apply filters if specified
+        filtered_lines = []
+        for line in lines[-lines_limit:]:  # Get most recent lines first
+            if log_level and log_level not in line:
+                continue
+            if search_term and search_term.lower() not in line.lower():
+                continue
+            filtered_lines.append(line)
+
+        if not filtered_lines:
+            await update.message.reply_text("❌ No log entries match your criteria.")
+            return
+
+        # Reverse to show newest first
+        filtered_lines.reverse()
+        log_content = ''.join(filtered_lines)
+
+        # Create informative header
+        header = (
+            f"📋 Bot Logs - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"• File: {log_file_path}\n"
+            f"• Level: {log_level or 'ALL'}\n"
+            f"• Search: {search_term or 'None'}\n"
+            f"• Entries: {len(filtered_lines)}\n\n"
+        )
+
+        full_content = header + log_content
+
+        # Determine whether to send as text or document
+        if len(full_content) <= 2000:
+            try:
+                await update.message.reply_text(f"<pre>{escape(full_content)}</pre>", 
+                                              parse_mode='HTML')
+            except Exception as e:
+                # Fallback if HTML fails
+                await update.message.reply_text(full_content)
+        else:
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', 
+                                          encoding='utf-8', delete=False) as temp_file:
+                temp_file.write(full_content)
+                temp_file_path = temp_file.name
+
+            # Send document
+            try:
+                with open(temp_file_path, 'rb') as document:
+                    await update.message.reply_document(
+                        document=document,
+                        filename=f"bot_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                        caption=f"Bot logs - {len(filtered_lines)} entries"
+                    )
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+
+    except Exception as e:
+        error_msg = f"❌ Error processing logs: {str(e)}"
+        logging.error(error_msg)
+        await update.message.reply_text(error_msg)
+
+
+# Add this to your command handlers:
 async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_user_banned(update.effective_user.id):
         await update.message.reply_text("❌ You are banned from using this command.")
@@ -2207,6 +2339,7 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("info", info_command))
     application.add_handler(CommandHandler("list", list_command))
     application.add_handler(CommandHandler("delete_poll", delete_poll_command))
+    application.add_handler(CommandHandler("logs", logs_command))
     # Admin commands
     application.add_handler(CommandHandler("ban", ban_command))
     application.add_handler(CommandHandler("unban", unban_command))
