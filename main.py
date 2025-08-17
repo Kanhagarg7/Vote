@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.helpers import escape_markdown
-from telegram.helpers import escape_html
+import html
 
 from telegram.error import BadRequest, TelegramError
 import time
@@ -113,7 +113,7 @@ class DatabaseBackupSystem:
     async def _get_channel_messages(self):
         """Helper method to get channel messages - simplified implementation"""
         # This is a placeholder - actual implementation would depend on bot permissions
-        # You might need to use different approaches based on your bot's access level
+        # You might need to use different approaches based on available telegram API methods
         try:
             # This would need to be implemented based on available telegram API methods
             pass
@@ -184,7 +184,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def dashboard():
-    html = '''
+    html_template = '''
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -505,7 +505,7 @@ def dashboard():
     </body>
     </html>
     '''
-    return html
+    return html_template
 
 @app.route('/api/stats')
 def api_stats():
@@ -1138,11 +1138,11 @@ async def start_command(update, context):
 
     response = (
         f"✅ Successfully participated.\n\n"
-        f"‣ *User* : {escape_markdown(user.first_name, version=1)} {escape_markdown(user.last_name or '', version=1)}\n"
+        f"‣ *User* : {escape_markdown(user.first_name, version=2)} {escape_markdown(user.last_name or '', version=2)}\n"
         f"‣ *User-ID* : `{user.id}`\n"
-        f"‣ *Username* : @{escape_markdown(user.username or 'None', version=1)}\n"
-        f"‣ *Link* : [{escape_markdown(user.first_name, version=1)}](tg://user?id={user.id})\n"
-        f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=1)}\n"
+        f"‣ *Username* : @{escape_markdown(user.username or 'None', version=2)}\n"
+        f"‣ *Link* : [{escape_markdown(user.first_name, version=2)}](tg://user?id={user.id})\n"
+        f"‣ *Poll ID* : {escape_markdown(str(poll_id), version=2)}\n"
         f"‣ *Note* : Only channel subscribers can vote.\n\n"
         f"×× Created by - [@Trusted_Sellers_of_Pd](https://t.me/Trusted_Sellers_of_Pd)"
     )
@@ -1153,14 +1153,14 @@ async def start_command(update, context):
             caption=response,
             photo=open(img_path, "rb"),
             reply_markup=button,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
         )
     else:
         sent_message = await context.bot.send_message(
             chat_id=f"@{channel_username}",
             text=response,
             reply_markup=button,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             disable_web_page_preview=True
         )
 
@@ -1243,10 +1243,10 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         top_message = f"🏆 Top participants in @{channel_username}:\n\n"
         for i, (poll_id, user_name, user_id, join_time) in enumerate(top_users[:10]):
-            user_name = escape_markdown(user_name, version=1)
-            top_message += f"🎖 *{i+1}. {user_name}* (ID: {poll_id})\n"
+            user_name = escape_markdown(user_name, version=2)
+            top_message += f"🎖 *{i+1}\\. {user_name}* \\(ID: {poll_id}\\)\n"
         
-        await update.message.reply_text(top_message, parse_mode="Markdown")
+        await update.message.reply_text(top_message, parse_mode="MarkdownV2")
         return
     
     # Get top for user's active channels
@@ -1265,10 +1265,10 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         top_message = f"🏆 Top participants in @{channel}:\n\n"
         for i, (poll_id, user_name, user_id, join_time) in enumerate(top_users[:10]):
-            user_name = escape_markdown(user_name, version=1)
-            top_message += f"🎖 *{i+1}. {user_name}* (ID: {poll_id})\n"
+            user_name = escape_markdown(user_name, version=2)
+            top_message += f"🎖 *{i+1}\\. {user_name}* \\(ID: {poll_id}\\)\n"
         
-        await update.message.reply_text(top_message, parse_mode="Markdown")
+        await update.message.reply_text(top_message, parse_mode="MarkdownV2")
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_user_banned(update.effective_user.id):
@@ -1349,7 +1349,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"👥 **Voters in @{channel} ({start_num}-{end_num} of {total_voters}):**\n\n"
                     f"{voters_list}"
                 )
-                await update.message.reply_text(message, parse_mode="Markdown")
+                await update.message.reply_text(message, parse_mode="MarkdownV2")
             except Exception as e:
                 await update.message.reply_text(f"❌ Error sending message part {idx + 1}: {e}")
                 
@@ -1394,12 +1394,30 @@ async def delete_poll_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await update.message.reply_text(confirm_message, reply_markup=reply_markup)
 
+def safe_html_escape(text):
+    """
+    Safely escape HTML content while preserving markdown-style links
+    """
+    if not text:
+        return ""
+    
+    # First escape HTML entities
+    escaped_text = html.escape(text)
+    
+    return escaped_text
+
 def fix_html_links(text):
     """
-    Fixes HTML links by ensuring they follow the correct format.
-    Proper format: <a href="url">text</a> → text (url)
+    Convert HTML links to plain text format for better display
     """
-    return re.sub(r'<a href="(.*?)">(.*?)</a>', r'\2 (\1)', text)
+    if not text:
+        return ""
+    
+    # Convert <a href="url">text</a> to text (url)
+    link_pattern = re.compile(r'<a href="([^"]*)"[^>]*>([^<]*)</a>')
+    fixed_text = link_pattern.sub(r'\2 (\1)', text)
+    
+    return fixed_text
 
 async def confirm_delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1443,8 +1461,8 @@ async def confirm_delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # Check if the message is a photo or text
             if message.caption:
-                # Escape caption before applying strikethrough formatting
-                escaped_caption = escape_html(message.caption)
+                # Safely escape caption before applying strikethrough formatting
+                escaped_caption = safe_html_escape(message.caption)
                 fixed_caption = fix_html_links(escaped_caption)  # Fix broken links
                 updated_caption = f"<s>{fixed_caption}</s>\n\n<b>THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY</b>"
 
@@ -1452,12 +1470,12 @@ async def confirm_delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     caption=updated_caption,
-                    parse_mode=telegram.constants.ParseMode.HTML,
+                    parse_mode="HTML",
                     reply_markup=None  # Remove inline buttons
                 )
             else:
-                # Escape text before applying strikethrough formatting
-                escaped_text = escape_html(message.text)
+                # Safely escape text before applying strikethrough formatting
+                escaped_text = safe_html_escape(message.text)
                 fixed_text = fix_html_links(escaped_text)  # Fix broken links
                 updated_text = f"<s>{fixed_text}</s>\n\n<b>THIS POLL HAS BEEN DISQUALIFIED FROM THE GIVEAWAY</b>"
 
@@ -1465,7 +1483,7 @@ async def confirm_delete_poll(update: Update, context: ContextTypes.DEFAULT_TYPE
                     chat_id=chat_id,
                     message_id=message_channel_id,
                     text=updated_text,
-                    parse_mode=telegram.constants.ParseMode.HTML,
+                    parse_mode="HTML",
                     reply_markup=None  # Remove inline buttons
                 )
 
@@ -1500,7 +1518,7 @@ async def current_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if created_channels:
         for channel in created_channels:
             vote_count = get_channel_vote_count(channel)
-            channel_escaped = escape_markdown(channel, version=1)
+            channel_escaped = escape_markdown(channel, version=2)
             
             creator_message = (
                 f"👑 *Your Created Poll:*\n"
@@ -1508,7 +1526,7 @@ async def current_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⭐ *Total Votes:* {vote_count}\n"
                 f"⭐ *Status:* Creator\n"
             )
-            await update.message.reply_text(creator_message, parse_mode="Markdown")
+            await update.message.reply_text(creator_message, parse_mode="MarkdownV2")
     
     # Show participating polls
     if active_channels:
@@ -1523,7 +1541,7 @@ async def current_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             has_voted = cursor.fetchone() is not None
             conn.close()
             
-            channel_escaped = escape_markdown(channel, version=1)
+            channel_escaped = escape_markdown(channel, version=2)
             
             participant_message = (
                 f"🎯 *Participating In:*\n"
@@ -1531,7 +1549,7 @@ async def current_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⭐ *Total Votes:* {vote_count}\n"
                 f"⭐ *Your Vote Status:* {'✅ Voted' if has_voted else '❌ Not Voted'}\n"
             )
-            await update.message.reply_text(participant_message, parse_mode="Markdown")
+            await update.message.reply_text(participant_message, parse_mode="MarkdownV2")
     
     # Show summary
     total_sessions = len(active_channels) + len(created_channels)
@@ -1539,9 +1557,9 @@ async def current_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 *Summary:*\n"
         f"📝 *Created Polls:* {len(created_channels)}\n"
         f"🎯 *Participating In:* {len(active_channels)}\n"
-        f"📈 *Total Active Sessions:* {total_sessions}/6 (5 max participating + 1 created)\n"
+        f"📈 *Total Active Sessions:* {total_sessions}/6 \\(5 max participating \\+ 1 created\\)\n"
     )
-    await update.message.reply_text(summary_message, parse_mode="Markdown")
+    await update.message.reply_text(summary_message, parse_mode="MarkdownV2")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_user_banned(update.effective_user.id):
@@ -1784,7 +1802,7 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔗 **Mention:** [{user_info['first_name']}](tg://user?id={user_info['user_id']})"
     )
 
-    await update.message.reply_text(user_message, parse_mode="Markdown")
+    await update.message.reply_text(user_message, parse_mode="MarkdownV2")
 
 # New command to leave a specific poll
 async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1861,6 +1879,7 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("info", info_command))
     application.add_handler(CommandHandler("list", list_command))
     application.add_handler(CommandHandler("delete_poll", delete_poll_command))
+    application.add_handler(CommandHandler("leave", leave_command))
     # Admin commands
     application.add_handler(CommandHandler("ban", ban_command))
     application.add_handler(CommandHandler("unban", unban_command))
