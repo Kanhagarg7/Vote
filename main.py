@@ -2207,7 +2207,6 @@ if __name__ == "__main__":
     application.add_handler(CommandHandler("info", info_command))
     application.add_handler(CommandHandler("list", list_command))
     application.add_handler(CommandHandler("delete_poll", delete_poll_command))
-    application.add_handler(CommandHandler("leave", leave_command))
     # Admin commands
     application.add_handler(CommandHandler("ban", ban_command))
     application.add_handler(CommandHandler("unban", unban_command))
@@ -2232,8 +2231,6 @@ if __name__ == "__main__":
     flask_thread.start()
     
     # Register cleanup function
-    import atexit
-    atexit.register(stop_backup_system)
 
     # Start polling
     print("🚀 Bot started successfully!")
