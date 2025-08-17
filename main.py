@@ -11,15 +11,14 @@ from telegram.ext import (
     filters,
 )
 from telegram.helpers import escape_markdown
-import html
+from telegram.helpers import escape_html
 
 from telegram.error import BadRequest, TelegramError
-import time
-from datetime import *
+# Import specific items from datetime instead of using wildcard import
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot
 from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, ContextTypes
 import sqlite3
-from datetime import datetime, timedelta
 import logging
 import urllib.parse
 import re
