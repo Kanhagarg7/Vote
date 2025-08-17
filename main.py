@@ -13,23 +13,588 @@ from telegram.ext import (
 from telegram.helpers import escape_markdown
 from telegram.helpers import escape_html
 
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 import time
 from datetime import *
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot
 from telegram.ext import Application, CallbackQueryHandler, ChatMemberHandler, ContextTypes
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import urllib.parse
 import re
 import telegram
+import asyncio
+import threading
+from flask import Flask, render_template_string, jsonify, request
 
 img_path = "img/img.png"
 BOT_TOKEN = "7593876189:AAExsIGMoAs8eokv45xQA3h5IyW2-ZHg2KA"
 owners = [5873900195]  # ActiveForever
 special_users = [5873900195, 6574063018]  # ActiveForever and TeamKanha (replace with actual ID)
 bot_username = "ActiveForever_Votingbot"
+
+# Backup configuration
+BACKUP_CHANNEL_ID = -1003044741584
+DATABASE_FILES = ["vote_bot.db", "bot_main.db"]
+
+class DatabaseBackupSystem:
+    def __init__(self, bot_token, channel_id):
+        self.bot = Bot(token=bot_token)
+        self.channel_id = channel_id
+        self.backup_interval = 30 * 60  # 30 minutes in seconds
+        self.running = False
+        self.backup_thread = None
+        
+    async def send_database_backup(self):
+        """Send database files to backup channel"""
+        try:
+            for db_file in DATABASE_FILES:
+                if os.path.exists(db_file):
+                    # Create backup filename with timestamp
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    backup_filename = f"backup_{timestamp}_{db_file}"
+                    
+                    with open(db_file, 'rb') as file:
+                        await self.bot.send_document(
+                            chat_id=self.channel_id,
+                            document=file,
+                            filename=backup_filename,
+                            caption=f"Database backup: {db_file} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        )
+                    
+                    logging.info(f"Successfully backed up {db_file} to channel")
+                else:
+                    logging.warning(f"Database file {db_file} not found, skipping backup")
+                    
+        except TelegramError as e:
+            logging.error(f"Failed to send database backup: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error during backup: {e}")
+    
+    async def download_latest_databases(self):
+        """Download the 2 latest database files from backup channel if local files don't exist"""
+        try:
+            for db_file in DATABASE_FILES:
+                if not os.path.exists(db_file):
+                    logging.info(f"Local {db_file} not found, searching for backup...")
+                    
+                    # Get recent messages from the channel
+                    messages = []
+                    try:
+                        chat_history = await self.bot.get_chat(self.channel_id)
+                        # Alternative approach using get_updates or manual message retrieval
+                        # This is a simplified version - you might need to implement pagination
+                        async for message in self._get_channel_messages():
+                            if message.document and db_file in message.document.file_name:
+                                messages.append(message)
+                    except Exception as e:
+                        logging.error(f"Error accessing channel history: {e}")
+                        continue
+                    
+                    # Sort messages by date (newest first) and take the 2 most recent
+                    messages.sort(key=lambda x: x.date, reverse=True)
+                    latest_messages = messages[:2]
+                    
+                    if latest_messages:
+                        # Download the latest backup
+                        latest_message = latest_messages[0]
+                        file = await latest_message.document.get_file()
+                        await file.download_to_drive(db_file)
+                        logging.info(f"Successfully downloaded latest {db_file} from backup channel")
+                    else:
+                        logging.warning(f"No backup found for {db_file} in channel")
+                        
+        except TelegramError as e:
+            logging.error(f"Failed to download database backup: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error during download: {e}")
+    
+    async def _get_channel_messages(self):
+        """Helper method to get channel messages - simplified implementation"""
+        # This is a placeholder - actual implementation would depend on bot permissions
+        # You might need to use different approaches based on your bot's access level
+        try:
+            # This would need to be implemented based on available telegram API methods
+            pass
+        except Exception:
+            pass
+    
+    def backup_loop(self):
+        """Main backup loop that runs in a separate thread"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        while self.running:
+            try:
+                # Check and download missing databases
+                loop.run_until_complete(self.download_latest_databases())
+                
+                # Send backup
+                loop.run_until_complete(self.send_database_backup())
+                
+                # Wait for next backup
+                time.sleep(self.backup_interval)
+                
+            except Exception as e:
+                logging.error(f"Error in backup loop: {e}")
+                time.sleep(60)  # Wait 1 minute before retrying
+    
+    def start_backup_system(self):
+        """Start the backup system in a separate thread"""
+        if not self.running:
+            self.running = True
+            self.backup_thread = threading.Thread(target=self.backup_loop, daemon=True)
+            self.backup_thread.start()
+            logging.info("Database backup system started")
+            return True
+        return False
+    
+    def stop_backup_system(self):
+        """Stop the backup system"""
+        if self.running:
+            self.running = False
+            if self.backup_thread:
+                self.backup_thread.join(timeout=5)
+            logging.info("Database backup system stopped")
+            return True
+        return False
+
+# Global backup system instance
+backup_system = None
+
+def initialize_backup_system():
+    """Initialize and start the backup system"""
+    global backup_system
+    if backup_system is None:
+        backup_system = DatabaseBackupSystem(BOT_TOKEN, BACKUP_CHANNEL_ID)
+        backup_system.start_backup_system()
+        return backup_system
+    return backup_system
+
+def stop_backup_system():
+    """Stop the backup system"""
+    global backup_system
+    if backup_system:
+        backup_system.stop_backup_system()
+        backup_system = None
+
+# Flask Web Interface
+app = Flask(__name__)
+
+@app.route('/')
+def dashboard():
+    html = '''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Telegram Voting Bot Dashboard</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container { 
+                max-width: 1200px; 
+                margin: 0 auto; 
+                background: rgba(255,255,255,0.95);
+                border-radius: 15px;
+                padding: 30px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            }
+            .header { 
+                text-align: center; 
+                margin-bottom: 40px;
+                color: #333;
+            }
+            .header h1 { 
+                font-size: 2.5em; 
+                margin-bottom: 10px;
+                background: linear-gradient(45deg, #667eea, #764ba2);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+            .stats-grid { 
+                display: grid; 
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+                gap: 20px; 
+                margin-bottom: 40px; 
+            }
+            .stat-card { 
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                padding: 25px; 
+                border-radius: 10px; 
+                text-align: center; 
+                color: white;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                transition: transform 0.3s ease;
+            }
+            .stat-card:hover { transform: translateY(-5px); }
+            .stat-card h3 { 
+                font-size: 1.2em; 
+                margin-bottom: 10px;
+                opacity: 0.9;
+            }
+            .stat-card p { 
+                font-size: 2em; 
+                font-weight: bold; 
+            }
+            .polls-section { 
+                margin-bottom: 40px; 
+            }
+            .polls-section h2 { 
+                color: #333; 
+                margin-bottom: 20px;
+                border-bottom: 2px solid #667eea;
+                padding-bottom: 10px;
+            }
+            .polls-table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                background: white;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            }
+            .polls-table th, .polls-table td { 
+                padding: 15px; 
+                text-align: left; 
+                border-bottom: 1px solid #eee;
+            }
+            .polls-table th { 
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white;
+                font-weight: 600;
+            }
+            .polls-table tr:hover { 
+                background-color: #f8f9fa; 
+            }
+            .status-active { 
+                color: #28a745; 
+                font-weight: bold; 
+            }
+            .status-inactive { 
+                color: #dc3545; 
+                font-weight: bold; 
+            }
+            .refresh-btn { 
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white; 
+                border: none; 
+                padding: 12px 25px; 
+                border-radius: 25px; 
+                cursor: pointer; 
+                font-size: 16px;
+                margin-bottom: 20px;
+                transition: all 0.3s ease;
+            }
+            .refresh-btn:hover { 
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            }
+            .backup-status {
+                background: linear-gradient(135deg, #4ecdc4, #44a08d);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                margin-bottom: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🤖 Telegram Voting Bot Dashboard</h1>
+                <p>Real-time monitoring and statistics</p>
+            </div>
+            
+            <div class="backup-status">
+                <h3>🔄 Backup System Status</h3>
+                <p id="backup-status">Loading...</p>
+            </div>
+            
+            <button class="refresh-btn" onclick="refreshData()">🔄 Refresh Data</button>
+            
+            <div class="stats-grid" id="stats-grid">
+                <!-- Stats will be loaded here -->
+            </div>
+            
+            <div class="polls-section">
+                <h2>📊 Active Polls</h2>
+                <div id="polls-table">
+                    <!-- Polls table will be loaded here -->
+                </div>
+            </div>
+            
+            <div class="polls-section">
+                <h2>👥 Recent Users</h2>
+                <div id="users-table">
+                    <!-- Users table will be loaded here -->
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            async function fetchStats() {
+                try {
+                    const response = await fetch('/api/stats');
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching stats:', error);
+                    return null;
+                }
+            }
+            
+            async function fetchPolls() {
+                try {
+                    const response = await fetch('/api/polls');
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching polls:', error);
+                    return null;
+                }
+            }
+            
+            async function fetchUsers() {
+                try {
+                    const response = await fetch('/api/users');
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching users:', error);
+                    return null;
+                }
+            }
+            
+            function updateStats(stats) {
+                if (!stats) return;
+                
+                const statsGrid = document.getElementById('stats-grid');
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <h3>Total Users</h3>
+                        <p>${stats.total_users}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Active Polls</h3>
+                        <p>${stats.active_polls}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Votes</h3>
+                        <p>${stats.total_votes}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Active Participants</h3>
+                        <p>${stats.active_participants}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Banned Users</h3>
+                        <p>${stats.banned_users}</p>
+                    </div>
+                `;
+            }
+            
+            function updatePolls(polls) {
+                if (!polls) return;
+                
+                const pollsTable = document.getElementById('polls-table');
+                if (polls.length === 0) {
+                    pollsTable.innerHTML = '<p>No active polls found.</p>';
+                    return;
+                }
+                
+                let tableHTML = `
+                    <table class="polls-table">
+                        <thead>
+                            <tr>
+                                <th>Channel</th>
+                                <th>Creator ID</th>
+                                <th>Poll ID</th>
+                                <th>Votes</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                polls.forEach(poll => {
+                    tableHTML += `
+                        <tr>
+                            <td>@${poll.channel_username}</td>
+                            <td>${poll.creator_id}</td>
+                            <td>${poll.current_poll_id}</td>
+                            <td>${poll.vote_count}</td>
+                            <td class="${poll.is_active ? 'status-active' : 'status-inactive'}">
+                                ${poll.is_active ? 'Active' : 'Inactive'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += '</tbody></table>';
+                pollsTable.innerHTML = tableHTML;
+            }
+            
+            function updateUsers(users) {
+                if (!users) return;
+                
+                const usersTable = document.getElementById('users-table');
+                if (users.length === 0) {
+                    usersTable.innerHTML = '<p>No users found.</p>';
+                    return;
+                }
+                
+                let tableHTML = `
+                    <table class="polls-table">
+                        <thead>
+                            <tr>
+                                <th>User ID</th>
+                                <th>Name</th>
+                                <th>Username</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                users.slice(0, 20).forEach(user => {
+                    tableHTML += `
+                        <tr>
+                            <td>${user.user_id}</td>
+                            <td>${user.first_name} ${user.last_name || ''}</td>
+                            <td>@${user.username || 'N/A'}</td>
+                            <td class="${user.is_banned ? 'status-inactive' : 'status-active'}">
+                                ${user.is_banned ? 'Banned' : 'Active'}
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += '</tbody></table>';
+                usersTable.innerHTML = tableHTML;
+            }
+            
+            function updateBackupStatus() {
+                const backupStatus = document.getElementById('backup-status');
+                backupStatus.innerHTML = 'Backup system running - Next backup in 30 minutes';
+            }
+            
+            async function refreshData() {
+                const [stats, polls, users] = await Promise.all([
+                    fetchStats(),
+                    fetchPolls(),
+                    fetchUsers()
+                ]);
+                
+                updateStats(stats);
+                updatePolls(polls);
+                updateUsers(users);
+                updateBackupStatus();
+            }
+            
+            // Initial load
+            refreshData();
+            
+            // Auto refresh every 30 seconds
+            setInterval(refreshData, 30000);
+        </script>
+    </body>
+    </html>
+    '''
+    return html
+
+@app.route('/api/stats')
+def api_stats():
+    try:
+        # Get statistics from main database
+        conn_main = sqlite3.connect("bot_main.db")
+        cursor_main = conn_main.cursor()
+        cursor_main.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor_main.fetchone()[0]
+        cursor_main.execute("SELECT COUNT(*) FROM users WHERE is_banned = 1")
+        banned_users = cursor_main.fetchone()[0]
+        conn_main.close()
+
+        # Get statistics from vote database
+        conn_vote = sqlite3.connect("vote_bot.db")
+        cursor_vote = conn_vote.cursor()
+        cursor_vote.execute("SELECT COUNT(*) FROM channel_polls WHERE is_active = 1")
+        active_polls = cursor_vote.fetchone()[0]
+        cursor_vote.execute("SELECT COUNT(*) FROM channel_votes")
+        total_votes = cursor_vote.fetchone()[0]
+        cursor_vote.execute("SELECT COUNT(DISTINCT user_id) FROM user_sessions")
+        active_participants = cursor_vote.fetchone()[0]
+        conn_vote.close()
+
+        return jsonify({
+            'total_users': total_users,
+            'banned_users': banned_users,
+            'active_polls': active_polls,
+            'total_votes': total_votes,
+            'active_participants': active_participants
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/polls')
+def api_polls():
+    try:
+        conn = sqlite3.connect("vote_bot.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT cp.channel_username, cp.creator_id, cp.current_poll_id, cp.is_active,
+                   (SELECT COUNT(*) FROM channel_votes cv WHERE cv.channel_username = cp.channel_username) as vote_count
+            FROM channel_polls cp
+            ORDER BY cp.current_poll_id DESC
+        """)
+        polls = cursor.fetchall()
+        conn.close()
+
+        poll_list = []
+        for poll in polls:
+            poll_list.append({
+                'channel_username': poll[0],
+                'creator_id': poll[1],
+                'current_poll_id': poll[2],
+                'is_active': poll[3],
+                'vote_count': poll[4]
+            })
+
+        return jsonify(poll_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users')
+def api_users():
+    try:
+        conn = sqlite3.connect("bot_main.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT user_id, first_name, last_name, username, is_banned
+            FROM users
+            ORDER BY user_id DESC
+            LIMIT 50
+        """)
+        users = cursor.fetchall()
+        conn.close()
+
+        user_list = []
+        for user in users:
+            user_list.append({
+                'user_id': user[0],
+                'first_name': user[1],
+                'last_name': user[2],
+                'username': user[3],
+                'is_banned': user[4]
+            })
+
+        return jsonify(user_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def init_db():
     conn = sqlite3.connect("vote_bot.db")
@@ -1274,6 +1839,9 @@ if __name__ == "__main__":
     create_db() 
     create_users_table()
     
+    # Initialize backup system
+    initialize_backup_system()
+    
     # Configure logging
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -1308,7 +1876,19 @@ if __name__ == "__main__":
     
     # Error handler
     application.add_error_handler(error_handler)
+    
+    # Start Flask web interface in a separate thread
+    def run_flask():
+        app.run(host='0.0.0.0', port=5000, debug=False)
+    
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Register cleanup function
+    import atexit
+    atexit.register(stop_backup_system)
 
     # Start polling
     print("🚀 Bot started successfully!")
+    print("🌐 Web dashboard available at http://localhost:5000")
     application.run_polling()
